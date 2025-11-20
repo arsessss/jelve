@@ -1,36 +1,19 @@
 import { Link } from "react-router-dom";
 import { ThemeToggle } from "./ThemeToggle";
-import logoLight from "@/assets/logo-light.png";
-import logoDark from "@/assets/logo-dark.png";
-import { useEffect, useState } from "react";
+import logo from "@/assets/logo.png";
 
 export const Header = () => {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-b border-border shadow-sm">
       <nav className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+          <Link to="/" className="flex items-center gap-3 group">
             <img 
-              src={theme === "dark" ? logoDark : logoLight} 
+              src={logo} 
               alt="Jelve Logo" 
-              className="h-12 w-12 object-contain transition-transform duration-300 hover:scale-110"
+              className="h-14 w-14 object-contain transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 animate-float"
             />
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            <span className="text-2xl font-bold text-foreground transition-all duration-300 group-hover:tracking-wider">
               جلوه
             </span>
           </Link>
@@ -38,19 +21,19 @@ export const Header = () => {
           <div className="flex items-center gap-6" dir="rtl">
             <Link 
               to="/" 
-              className="text-foreground hover:text-primary transition-colors duration-300 font-medium"
+              className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
             >
               صفحه اصلی
             </Link>
             <Link 
               to="/contact" 
-              className="text-foreground hover:text-primary transition-colors duration-300 font-medium"
+              className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
             >
               ارتباط با ما
             </Link>
             <Link 
               to="/login" 
-              className="text-foreground hover:text-primary transition-colors duration-300 font-medium"
+              className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
             >
               ورود
             </Link>
