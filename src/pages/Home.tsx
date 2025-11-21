@@ -14,12 +14,13 @@ const Home = () => {
           
           <div className="container mx-auto text-center relative z-10">
             <h1 
-              className="text-6xl md:text-7xl font-bold mb-8 animate-fade-in gradient-primary bg-clip-text text-transparent"
+              className="text-5xl md:text-6xl lg:text-7xl font-koodak font-bold mb-8 animate-fade-in px-4"
               dir="rtl"
               style={{ 
-                backgroundImage: 'linear-gradient(135deg, hsl(0, 0%, 9%), hsl(0, 0%, 40%))',
+                backgroundImage: 'linear-gradient(135deg, hsl(0, 0%, 3%), hsl(0, 0%, 30%))',
                 WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent'
+                WebkitTextFillColor: 'transparent',
+                lineHeight: '1.3'
               }}
             >
               مجتمع آموزشی جلوه

@@ -68,7 +68,7 @@ const Login = () => {
                 <Lock className="w-10 h-10 text-white" />
               </div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent" dir="rtl">
-                ورود به پنل مدیریت
+                ورود به وبسایت
               </h1>
             </div>
 
@@ -82,7 +82,7 @@ const Login = () => {
                     onChange={(e) => setUsername(e.target.value)}
                     required
                     className="pr-10 text-right"
-                    placeholder="SIM"
+                    placeholder="نام"
                   />
                 </div>
               </div>
