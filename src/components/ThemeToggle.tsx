@@ -26,13 +26,13 @@ export const ThemeToggle = () => {
       variant="outline"
       size="icon"
       onClick={toggleTheme}
-      className="rounded-full transition-all duration-300 hover:scale-110"
+      className="rounded-lg px-4 transition-all duration-300 hover:scale-105"
       aria-label="Toggle theme"
     >
       {theme === "light" ? (
-        <Moon className="h-5 w-5 transition-transform duration-300 rotate-0" />
+        <Moon className="h-5 w-5 transition-all duration-300" />
       ) : (
-        <Sun className="h-5 w-5 transition-transform duration-300 rotate-0" />
+        <Sun className="h-5 w-5 transition-all duration-300" />
       )}
     </Button>
   );

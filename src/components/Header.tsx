@@ -7,15 +7,12 @@ export const Header = () => {
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-b border-border shadow-sm">
       <nav className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
+          <Link to="/" className="flex items-center group">
             <img 
               src={logo} 
               alt="Jelve Logo" 
-              className="h-14 w-14 object-contain transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 animate-float"
+              className="h-14 w-14 object-contain transition-all duration-300 group-hover:scale-105"
             />
-            <span className="text-2xl font-bold text-foreground transition-all duration-300 group-hover:tracking-wider">
-              جلوه
-            </span>
           </Link>
 
           <div className="flex items-center gap-6" dir="rtl">
