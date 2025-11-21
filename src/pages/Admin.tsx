@@ -1,4 +1,4 @@
-import { Header } from "@/components/Header";
+import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -164,7 +164,7 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <RoleBasedHeader />
       
       <main className="pt-24 pb-12 px-4">
         <div className="container mx-auto">

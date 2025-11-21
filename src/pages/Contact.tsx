@@ -1,4 +1,4 @@
-import { Header } from "@/components/Header";
+import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { MapSection } from "@/components/MapSection";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -69,7 +69,7 @@ const Contact = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <RoleBasedHeader />
       
       <main className="pt-24">
         <section className="py-12 px-4">

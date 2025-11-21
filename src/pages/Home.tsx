@@ -1,11 +1,11 @@
-import { Header } from "@/components/Header";
+import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { SchoolBlock } from "@/components/SchoolBlock";
 import { MapSection } from "@/components/MapSection";
 
 const Home = () => {
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <RoleBasedHeader />
       
       <main className="pt-24">
         {/* Hero Section */}
