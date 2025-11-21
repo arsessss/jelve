@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { z } from "zod";
+
+const contactSchema = z.object({
+  name: z.string().trim().min(2, "نام باید حداقل ۲ حرف باشد").max(100, "نام نباید بیش از ۱۰۰ حرف باشد"),
+  phone: z.string().regex(/^09\d{9}$/, "شماره تلفن باید به فرمت ۰۹۱۲۳۴۵۶۷۸۹ باشد"),
+  message: z.string().trim().min(10, "پیام باید حداقل ۱۰ حرف باشد").max(1000, "پیام نباید بیش از ۱۰۰۰ حرف باشد")
+});
 
 const Contact = () => {
   const [name, setName] = useState("");
@@ -20,9 +27,16 @@ const Contact = () => {
     setLoading(true);
 
     try {
+      // Validate inputs
+      const validatedData = contactSchema.parse({
+        name,
+        phone,
+        message
+      });
+
       const { error } = await supabase
         .from("contact_messages")
-        .insert([{ name, phone, message }]);
+        .insert([validatedData]);
 
       if (error) throw error;
 
@@ -35,11 +49,19 @@ const Contact = () => {
       setPhone("");
       setMessage("");
     } catch (error) {
-      toast({
-        title: "خطا",
-        description: "ارسال پیام با مشکل مواجه شد. لطفا دوباره تلاش کنید.",
-        variant: "destructive",
-      });
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "خطا در اعتبارسنجی",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "خطا",
+          description: "ارسال پیام با مشکل مواجه شد. لطفا دوباره تلاش کنید.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
