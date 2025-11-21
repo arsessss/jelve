@@ -1,4 +1,4 @@
-import { Header } from "@/components/Header";
+import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,16 @@ const Login = () => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        navigate("/admin");
+        // Check user role and redirect accordingly
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id);
+
+        if (roles && roles.length > 0) {
+          const role = roles[0].role;
+          navigate(role === "admin" ? "/admin" : role === "student" ? "/student" : "/");
+        }
       }
     };
     checkAuth();
@@ -30,25 +39,44 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // For demo: username is SIM, password is SIM
-      // In production, use real email/password
-      const { error } = await supabase.auth.signInWithPassword({
-        email: `${username}@jelve.org`,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: username,
         password: password,
       });
 
       if (error) throw error;
 
-      toast({
-        title: "خوش آمدید",
-        description: "ورود موفقیت‌آمیز بود",
-      });
+      if (data.user) {
+        // Check user role
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.user.id);
 
-      navigate("/admin");
-    } catch (error) {
+        toast({
+          title: "خوش آمدید",
+          description: "ورود موفقیت‌آمیز بود",
+        });
+
+        if (roles && roles.length > 0) {
+          const role = roles[0].role;
+          if (role === "admin") {
+            navigate("/admin");
+          } else if (role === "student") {
+            navigate("/student");
+          } else {
+            navigate("/");
+          }
+        } else {
+          navigate("/");
+        }
+      }
+    } catch (error: any) {
       toast({
         title: "خطا",
-        description: "نام کاربری یا رمز عبور اشتباه است",
+        description: error.message === "Invalid login credentials" 
+          ? "نام کاربری یا رمز عبور اشتباه است" 
+          : "ورود با مشکل مواجه شد",
         variant: "destructive",
       });
     } finally {
@@ -58,7 +86,7 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <RoleBasedHeader />
       
       <main className="pt-24 pb-12 px-4">
         <div className="container mx-auto flex items-center justify-center min-h-[calc(100vh-200px)]">
