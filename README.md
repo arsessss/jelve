@@ -1,63 +1,73 @@
-# Jelve Website – Recreated Version
+# Welcome to your Lovable project
 
-## Overview
+## Project info
 
-This project is a complete recreation of the Jelve website.  
-It includes all core pages and functionality from the original design:
+**URL**: https://lovable.dev/projects/1f140819-fe15-4dde-b9bd-9f8813d7cb91
 
-- Home page  
-- Contact page  
-- Login page (Admin Panel)  
-- Editable text sections  
-- Lightweight data storage for admin access  
+## How can I edit this code?
 
-**Live URL:** https://jelve.netlify.app
+There are several ways of editing your application.
 
----
+**Use Lovable**
 
-## Features
+Simply visit the [Lovable Project](https://lovable.dev/projects/1f140819-fe15-4dde-b9bd-9f8813d7cb91) and start prompting.
 
-- Clean multi-page layout  
-- Fully responsive design  
-- Simple admin login system  
-- Editable homepage content  
-- Contact information boxes  
-- Organized and easy-to-modify structure  
-- Fast deployment on Netlify  
+Changes made via Lovable will be committed automatically to this repo.
 
----
+**Use your preferred IDE**
 
-## Project Structure
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-/assets
-/css
-/js
-index.html
-contact.html
-login.html
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
----
+Follow these steps:
 
-## Editing the Project
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
 
-### 1. Edit Locally
-
-Clone the repository and modify it using any editor (VS Code recommended):
-
-git clone <YOUR_REPOSITORY_URL>
+# Step 2: Navigate to the project directory.
 cd <YOUR_PROJECT_NAME>
 
-This project is built with standard HTML, CSS, and JavaScript,
-so no build tools are required — just open index.html in your browser.
+# Step 3: Install the necessary dependencies.
+npm i
 
-### 2. Edit Directly on GitHub
+# Step 4: Start the development server with auto-reloading and an instant preview.
+npm run dev
+```
 
-Open the file you want to update
+**Edit a file directly in GitHub**
 
-Click the Edit (pencil) button
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-Make your changes
+**Use GitHub Codespaces**
 
-Commit them to the repository
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-Your Netlify deploy will update automatically.
+## What technologies are used for this project?
+
+This project is built with:
+
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
+
+## How can I deploy this project?
+
+Simply open [Lovable](https://lovable.dev/projects/1f140819-fe15-4dde-b9bd-9f8813d7cb91) and click on Share -> Publish.
+
+## Can I connect a custom domain to my Lovable project?
+
+Yes, you can!
+
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
