@@ -46,10 +46,11 @@ Clone the repository and modify it using any editor (VS Code recommended):
 
 git clone <YOUR_REPOSITORY_URL>
 cd <YOUR_PROJECT_NAME>
+
 This project is built with standard HTML, CSS, and JavaScript,
 so no build tools are required — just open index.html in your browser.
 
-2. Edit Directly on GitHub
+### 2. Edit Directly on GitHub
 
 Open the file you want to update
 
