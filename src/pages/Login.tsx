@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { customAuth } from "@/lib/auth";
 import { Lock, User } from "lucide-react";
 
 const Login = () => {
@@ -16,72 +16,44 @@ const Login = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // Check user role and redirect accordingly
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id);
-
-        if (roles && roles.length > 0) {
-          const role = roles[0].role;
-          navigate(role === "admin" ? "/admin" : role === "student" ? "/student" : "/");
-        }
-      }
-    };
-    checkAuth();
+    const session = customAuth.getSession();
+    if (session) {
+      navigate(session.role === "admin" ? "/admin" : session.role === "student" ? "/student" : "/");
+    }
   }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: username,
-        password: password,
-      });
+    const { session, error } = await customAuth.login(username, password);
 
-      if (error) throw error;
-
-      if (data.user) {
-        // Check user role
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", data.user.id);
-
-        toast({
-          title: "خوش آمدید",
-          description: "ورود موفقیت‌آمیز بود",
-        });
-
-        if (roles && roles.length > 0) {
-          const role = roles[0].role;
-          if (role === "admin") {
-            navigate("/admin");
-          } else if (role === "student") {
-            navigate("/student");
-          } else {
-            navigate("/");
-          }
-        } else {
-          navigate("/");
-        }
-      }
-    } catch (error: any) {
+    if (error) {
       toast({
         title: "خطا",
-        description: error.message === "Invalid login credentials" 
-          ? "نام کاربری یا رمز عبور اشتباه است" 
-          : "ورود با مشکل مواجه شد",
+        description: error,
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
+      return;
     }
+
+    if (session) {
+      toast({
+        title: "خوش آمدید",
+        description: "ورود موفقیت‌آمیز بود",
+      });
+
+      if (session.role === "admin") {
+        navigate("/admin");
+      } else if (session.role === "student") {
+        navigate("/student");
+      } else {
+        navigate("/");
+      }
+    }
+
+    setLoading(false);
   };
 
   return (
@@ -110,7 +82,7 @@ const Login = () => {
                     onChange={(e) => setUsername(e.target.value)}
                     required
                     className="pr-10 text-right"
-                    placeholder="نام"
+                    placeholder="نام کاربری"
                   />
                 </div>
               </div>

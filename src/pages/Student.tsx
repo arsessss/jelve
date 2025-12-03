@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { customAuth, AuthSession } from "@/lib/auth";
 import { LogOut, BookOpen, GraduationCap, FileText } from "lucide-react";
 
 interface StudentData {
@@ -15,29 +16,20 @@ interface StudentData {
 }
 
 const Student = () => {
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [studentData, setStudentData] = useState<StudentData | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    const currentSession = customAuth.getSession();
+    if (!currentSession) {
       navigate("/login");
       return;
     }
 
-    // Check if user is student
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", session.user.id);
-
-    if (!roles || !roles.some(r => r.role === "student")) {
+    if (currentSession.role !== "student") {
       toast({
         title: "دسترسی غیرمجاز",
         description: "شما دسترسی به این صفحه ندارید",
@@ -47,21 +39,25 @@ const Student = () => {
       return;
     }
 
-    // Fetch student data
-    const { data: student } = await supabase
+    setSession(currentSession);
+    fetchStudentData(currentSession.user.id);
+  }, [navigate]);
+
+  const fetchStudentData = async (userId: string) => {
+    const { data, error } = await supabase
       .from("students")
       .select("*")
-      .eq("user_id", session.user.id)
-      .single();
+      .eq("user_id", userId)
+      .maybeSingle();
 
-    if (student) {
-      setStudentData(student);
+    if (!error && data) {
+      setStudentData(data);
     }
     setLoading(false);
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
+    customAuth.logout();
     navigate("/login");
   };
 
