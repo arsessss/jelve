@@ -2,41 +2,21 @@ import { Link } from "react-router-dom";
 import { ThemeToggle } from "./ThemeToggle";
 import logo from "@/assets/logo.png";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { customAuth, AuthSession } from "@/lib/auth";
 
 export const RoleBasedHeader = () => {
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<AuthSession | null>(null);
 
   useEffect(() => {
-    checkUserRole();
+    setSession(customAuth.getSession());
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      checkUserRole();
-    });
+    const handleAuthChange = () => {
+      setSession(customAuth.getSession());
+    };
 
-    return () => subscription.unsubscribe();
+    window.addEventListener("auth-change", handleAuthChange);
+    return () => window.removeEventListener("auth-change", handleAuthChange);
   }, []);
-
-  const checkUserRole = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      setUserRole(null);
-      setLoading(false);
-      return;
-    }
-
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", session.user.id);
-
-    if (roles && roles.length > 0) {
-      setUserRole(roles[0].role);
-    }
-    setLoading(false);
-  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-b border-border shadow-sm">
@@ -64,35 +44,31 @@ export const RoleBasedHeader = () => {
               ارتباط با ما
             </Link>
             
-            {!loading && (
-              <>
-                {userRole === "admin" && (
-                  <Link 
-                    to="/admin" 
-                    className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
-                  >
-                    پنل
-                  </Link>
-                )}
-                
-                {userRole === "student" && (
-                  <Link 
-                    to="/student" 
-                    className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
-                  >
-                    دانش‌آموز
-                  </Link>
-                )}
-                
-                {!userRole && (
-                  <Link 
-                    to="/login" 
-                    className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
-                  >
-                    ورود
-                  </Link>
-                )}
-              </>
+            {session?.role === "admin" && (
+              <Link 
+                to="/admin" 
+                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+              >
+                پنل
+              </Link>
+            )}
+            
+            {session?.role === "student" && (
+              <Link 
+                to="/student" 
+                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+              >
+                دانش‌آموز
+              </Link>
+            )}
+            
+            {!session && (
+              <Link 
+                to="/login" 
+                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+              >
+                ورود
+              </Link>
             )}
             
             <ThemeToggle />

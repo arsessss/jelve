@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { customAuth } from "@/lib/auth";
 import { LogOut, Save, MessageSquare, UserPlus, Trash2, Users } from "lucide-react";
 
 interface Student {
@@ -23,7 +24,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [newStudent, setNewStudent] = useState({ name: "", email: "", password: "", grade: "haftom" });
+  const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "haftom" });
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -33,20 +34,14 @@ const Admin = () => {
     fetchStudents();
   }, []);
 
-  const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+  const checkAuth = () => {
+    const session = customAuth.getSession();
     if (!session) {
       navigate("/login");
       return;
     }
 
-    // Check if user is admin
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", session.user.id);
-
-    if (!roles || !roles.some(r => r.role === "admin")) {
+    if (session.role !== "admin") {
       toast({
         title: "دسترسی غیرمجاز",
         description: "شما دسترسی به این صفحه ندارید",
@@ -78,8 +73,8 @@ const Admin = () => {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
+    customAuth.logout();
     navigate("/login");
   };
 
@@ -95,31 +90,46 @@ const Admin = () => {
     setLoading(true);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newStudent.email,
-        password: newStudent.password,
-      });
+      const { userId, error: authError } = await customAuth.createUser(
+        newStudent.username,
+        newStudent.password,
+        newStudent.name,
+        "student"
+      );
 
-      if (authError) throw authError;
-
-      if (authData.user) {
-        await supabase.from("user_roles").insert({
-          user_id: authData.user.id,
-          role: "student",
+      if (authError) {
+        toast({
+          title: "خطا",
+          description: authError,
+          variant: "destructive",
         });
+        setLoading(false);
+        return;
+      }
 
-        await supabase.from("students").insert({
-          user_id: authData.user.id,
+      if (userId) {
+        const { error: studentError } = await supabase.from("students").insert({
+          user_id: userId,
           full_name: newStudent.name,
           grade: newStudent.grade,
         });
+
+        if (studentError) {
+          toast({
+            title: "خطا",
+            description: studentError.message,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
 
         toast({
           title: "موفقیت‌آمیز",
           description: "دانش‌آموز با موفقیت ایجاد شد",
         });
 
-        setNewStudent({ name: "", email: "", password: "", grade: "haftom" });
+        setNewStudent({ name: "", username: "", password: "", grade: "haftom" });
         fetchStudents();
       }
     } catch (error: any) {
@@ -208,10 +218,9 @@ const Admin = () => {
                     className="text-right"
                   />
                   <Input
-                    placeholder="ایمیل"
-                    type="email"
-                    value={newStudent.email}
-                    onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+                    placeholder="نام کاربری"
+                    value={newStudent.username}
+                    onChange={(e) => setNewStudent({ ...newStudent, username: e.target.value })}
                     required
                     className="text-right"
                   />
