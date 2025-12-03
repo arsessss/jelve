@@ -38,6 +38,30 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_users: {
+        Row: {
+          created_at: string
+          full_name: string | null
+          id: string
+          password_hash: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          password_hash: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          password_hash?: string
+          username?: string
+        }
+        Relationships: []
+      }
       students: {
         Row: {
           created_at: string
