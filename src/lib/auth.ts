@@ -15,13 +15,17 @@ const SESSION_KEY = "jelve_session";
 
 export const customAuth = {
   async login(username: string, password: string): Promise<{ session: AuthSession | null; error: string | null }> {
-    const { data: users, error } = await supabase
+    // Use type assertion to bypass strict typing for custom table
+    const { data: users, error } = await (supabase as any)
       .from("custom_users")
       .select("id, username, password_hash, full_name")
       .eq("username", username)
       .single();
 
+    console.log("Login attempt:", { username, users, error });
+
     if (error || !users) {
+      console.error("Login error:", error);
       return { session: null, error: "نام کاربری یا رمز عبور اشتباه است" };
     }
 
@@ -69,7 +73,7 @@ export const customAuth = {
 
   async createUser(username: string, password: string, fullName: string, role: "admin" | "student"): Promise<{ userId: string | null; error: string | null }> {
     // Insert into custom_users
-    const { data: newUser, error: userError } = await supabase
+    const { data: newUser, error: userError } = await (supabase as any)
       .from("custom_users")
       .insert({
         username,
