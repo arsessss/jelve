@@ -20,11 +20,33 @@ interface Student {
   user_id: string;
 }
 
+interface Address {
+  id: string;
+  title: string;
+  address: string;
+  phone: string;
+  sort_order: number;
+}
+
+interface SiteContent {
+  id: string;
+  key: string;
+  value: string;
+}
+
 const Admin = () => {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [siteContent, setSiteContent] = useState<SiteContent[]>([]);
   const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "haftom" });
+  
+  // Editable content state
+  const [mainTitle, setMainTitle] = useState("");
+  const [mainDescription, setMainDescription] = useState("");
+  const [editedAddresses, setEditedAddresses] = useState<Record<string, { address: string; phone: string }>>({});
+  
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -32,6 +54,8 @@ const Admin = () => {
     checkAuth();
     fetchMessages();
     fetchStudents();
+    fetchAddresses();
+    fetchSiteContent();
   }, []);
 
   const checkAuth = () => {
@@ -73,16 +97,125 @@ const Admin = () => {
     }
   };
 
+  const fetchAddresses = async () => {
+    const { data, error } = await (supabase as any)
+      .from("addresses")
+      .select("*")
+      .order("sort_order", { ascending: true });
+
+    if (!error && data) {
+      setAddresses(data);
+      // Initialize edited addresses
+      const initial: Record<string, { address: string; phone: string }> = {};
+      data.forEach((addr: Address) => {
+        initial[addr.id] = { address: addr.address, phone: addr.phone };
+      });
+      setEditedAddresses(initial);
+    }
+  };
+
+  const fetchSiteContent = async () => {
+    const { data, error } = await (supabase as any)
+      .from("site_content")
+      .select("*");
+
+    if (!error && data) {
+      setSiteContent(data);
+      // Set initial values
+      const title = data.find((c: SiteContent) => c.key === "main_title");
+      const desc = data.find((c: SiteContent) => c.key === "main_description");
+      if (title) setMainTitle(title.value);
+      if (desc) setMainDescription(desc.value);
+    }
+  };
+
   const handleLogout = () => {
     customAuth.logout();
     navigate("/login");
   };
 
-  const handleSave = () => {
-    toast({
-      title: "ذخیره شد",
-      description: "تغییرات با موفقیت ذخیره شد",
-    });
+  const saveContent = async () => {
+    setLoading(true);
+    try {
+      // Update main title
+      await (supabase as any)
+        .from("site_content")
+        .update({ value: mainTitle, updated_at: new Date().toISOString() })
+        .eq("key", "main_title");
+
+      // Update main description
+      await (supabase as any)
+        .from("site_content")
+        .update({ value: mainDescription, updated_at: new Date().toISOString() })
+        .eq("key", "main_description");
+
+      toast({
+        title: "ذخیره شد",
+        description: "محتوا با موفقیت ذخیره شد",
+      });
+    } catch (error: any) {
+      toast({
+        title: "خطا",
+        description: "ذخیره محتوا با مشکل مواجه شد",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveAddress = async (addressId: string) => {
+    setLoading(true);
+    try {
+      const edited = editedAddresses[addressId];
+      await (supabase as any)
+        .from("addresses")
+        .update({ 
+          address: edited.address, 
+          phone: edited.phone,
+          updated_at: new Date().toISOString() 
+        })
+        .eq("id", addressId);
+
+      toast({
+        title: "ذخیره شد",
+        description: "آدرس با موفقیت ذخیره شد",
+      });
+      fetchAddresses();
+    } catch (error: any) {
+      toast({
+        title: "خطا",
+        description: "ذخیره آدرس با مشکل مواجه شد",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!confirm("آیا از حذف این پیام اطمینان دارید؟")) return;
+
+    try {
+      const { error } = await supabase
+        .from("contact_messages")
+        .delete()
+        .eq("id", messageId);
+
+      if (error) throw error;
+
+      toast({
+        title: "حذف شد",
+        description: "پیام با موفقیت حذف شد",
+      });
+      fetchMessages();
+    } catch (error: any) {
+      toast({
+        title: "خطا",
+        description: "حذف پیام با مشکل مواجه شد",
+        variant: "destructive",
+      });
+    }
   };
 
   const createStudent = async (e: React.FormEvent) => {
@@ -143,11 +276,18 @@ const Admin = () => {
     }
   };
 
-  const deleteStudent = async (studentId: string) => {
+  const deleteStudent = async (studentId: string, userId: string) => {
     if (!confirm("آیا از حذف این دانش‌آموز اطمینان دارید؟")) return;
 
     try {
+      // Delete from students table
       await supabase.from("students").delete().eq("id", studentId);
+      
+      // Delete user role
+      await supabase.from("user_roles").delete().eq("user_id", userId);
+      
+      // Delete from custom_users
+      await (supabase as any).from("custom_users").delete().eq("id", userId);
       
       toast({
         title: "حذف شد",
@@ -170,6 +310,13 @@ const Admin = () => {
       nohom: "نهم",
     };
     return labels[grade] || grade;
+  };
+
+  const updateAddressField = (id: string, field: "address" | "phone", value: string) => {
+    setEditedAddresses(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
   };
 
   return (
@@ -260,7 +407,7 @@ const Admin = () => {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => deleteStudent(student.id)}
+                        onClick={() => deleteStudent(student.id, student.user_id)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -277,44 +424,44 @@ const Admin = () => {
               <Card className="p-6 border-2">
                 <h3 className="text-lg font-bold mb-4">عنوان صفحه اصلی</h3>
                 <Input 
-                  defaultValue="مجتمع آموزشی جلوه"
+                  value={mainTitle}
+                  onChange={(e) => setMainTitle(e.target.value)}
                   className="text-right mb-4"
                 />
                 <h3 className="text-lg font-bold mb-4">توضیحات</h3>
                 <Textarea 
-                  defaultValue="تربیت نسلی موفق با آموزش باکیفیت"
+                  value={mainDescription}
+                  onChange={(e) => setMainDescription(e.target.value)}
                   className="text-right"
                   rows={3}
                 />
-                <Button onClick={handleSave} className="mt-4">
+                <Button onClick={saveContent} disabled={loading} className="mt-4">
                   <Save className="w-4 h-4 ml-2" />
-                  ذخیره تغییرات
+                  {loading ? "در حال ذخیره..." : "ذخیره تغییرات"}
                 </Button>
               </Card>
             </TabsContent>
 
             <TabsContent value="addresses" className="space-y-4">
-              {[
-                { title: "دوره اول پسرانه", address: "مهرشهر، بلوار شهرداری، خ 110، پلاک 890", phone: "026-33423481" },
-                { title: "دوره دوم پسرانه", address: "مهرشهر، بلوار شهرداری، خ 206، پلاک 485", phone: "026-33408785" },
-                { title: "دوره دوم دخترانه", address: "مهرشهر، بلوار شهرداری، خ 209، پلاک 165", phone: "026-33400994" }
-              ].map((item, idx) => (
-                <Card key={idx} className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4">{item.title}</h3>
+              {addresses.map((addr) => (
+                <Card key={addr.id} className="p-6 border-2">
+                  <h3 className="text-lg font-bold mb-4">{addr.title}</h3>
                   <Input 
                     placeholder="آدرس"
-                    defaultValue={item.address}
+                    value={editedAddresses[addr.id]?.address || ""}
+                    onChange={(e) => updateAddressField(addr.id, "address", e.target.value)}
                     className="text-right mb-3"
                   />
                   <Input 
                     placeholder="شماره تماس"
-                    defaultValue={item.phone}
+                    value={editedAddresses[addr.id]?.phone || ""}
+                    onChange={(e) => updateAddressField(addr.id, "phone", e.target.value)}
                     className="text-right"
                     dir="ltr"
                   />
-                  <Button onClick={handleSave} className="mt-4">
+                  <Button onClick={() => saveAddress(addr.id)} disabled={loading} className="mt-4">
                     <Save className="w-4 h-4 ml-2" />
-                    ذخیره
+                    {loading ? "در حال ذخیره..." : "ذخیره"}
                   </Button>
                 </Card>
               ))}
@@ -335,9 +482,18 @@ const Admin = () => {
                           <h4 className="font-bold text-lg">{msg.name}</h4>
                           <p className="text-sm text-muted-foreground font-mono" dir="ltr">{msg.phone}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(msg.created_at).toLocaleDateString('fa-IR')}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(msg.created_at).toLocaleDateString('fa-IR')}
+                          </span>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => deleteMessage(msg.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                       <p className="text-muted-foreground leading-relaxed">{msg.message}</p>
                     </Card>
