@@ -1,22 +1,33 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ThemeToggle } from "./ThemeToggle";
 import logo from "@/assets/logo.png";
 import { useEffect, useState } from "react";
 import { customAuth, AuthSession } from "@/lib/auth";
+import { LogOut } from "lucide-react";
 
 export const RoleBasedHeader = () => {
   const [session, setSession] = useState<AuthSession | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    setSession(customAuth.getSession());
+    const currentSession = customAuth.getSession();
+    console.log("RoleBasedHeader session:", currentSession);
+    setSession(currentSession);
 
     const handleAuthChange = () => {
-      setSession(customAuth.getSession());
+      const newSession = customAuth.getSession();
+      console.log("Auth changed, new session:", newSession);
+      setSession(newSession);
     };
 
     window.addEventListener("auth-change", handleAuthChange);
     return () => window.removeEventListener("auth-change", handleAuthChange);
   }, []);
+
+  const handleLogout = () => {
+    customAuth.logout();
+    navigate("/");
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-b border-border shadow-sm">
@@ -69,6 +80,16 @@ export const RoleBasedHeader = () => {
               >
                 ورود
               </Link>
+            )}
+
+            {session && (
+              <button 
+                onClick={handleLogout}
+                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium flex items-center gap-1"
+              >
+                <LogOut className="w-4 h-4" />
+                خروج
+              </button>
             )}
             
             <ThemeToggle />
