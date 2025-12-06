@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      addresses: {
+        Row: {
+          address: string
+          id: string
+          phone: string
+          sort_order: number | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          address: string
+          id?: string
+          phone: string
+          sort_order?: number | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string
+          id?: string
+          phone?: string
+          sort_order?: number | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       contact_messages: {
         Row: {
           created_at: string
@@ -59,6 +86,27 @@ export type Database = {
           id?: string
           password_hash?: string
           username?: string
+        }
+        Relationships: []
+      }
+      site_content: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: string
         }
         Relationships: []
       }
