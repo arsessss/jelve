@@ -71,6 +71,7 @@ export type Database = {
           full_name: string | null
           id: string
           password_hash: string
+          profile_picture: string | null
           username: string
         }
         Insert: {
@@ -78,6 +79,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           password_hash: string
+          profile_picture?: string | null
           username: string
         }
         Update: {
@@ -85,7 +87,35 @@ export type Database = {
           full_name?: string | null
           id?: string
           password_hash?: string
+          profile_picture?: string | null
           username?: string
+        }
+        Relationships: []
+      }
+      online_classes: {
+        Row: {
+          created_at: string
+          grade: string
+          id: string
+          link: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          grade: string
+          id?: string
+          link: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          grade?: string
+          id?: string
+          link?: string
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
