@@ -1,16 +1,16 @@
 import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
-import { LogOut, Save, MessageSquare, UserPlus, Trash2, Users, Video, Plus } from "lucide-react";
+import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Pencil } from "lucide-react";
 
 interface Student {
   id: string;
@@ -20,23 +20,17 @@ interface Student {
   user_id: string;
 }
 
-interface Address {
-  id: string;
-  title: string;
-  address: string;
-  phone: string;
-  sort_order: number;
-}
-
-interface SiteContent {
-  id: string;
-  key: string;
-  value: string;
-}
-
 interface OnlineClass {
   id: string;
   grade: string;
+  title: string;
+  link: string;
+}
+
+interface Jozveh {
+  id: string;
+  grade: string;
+  subject: string;
   title: string;
   link: string;
 }
@@ -56,19 +50,26 @@ const GRADE_OPTIONS = [
   { value: "9/4", label: "۹/۴" },
 ];
 
+const SUBJECT_OPTIONS = [
+  { value: "olom", label: "علوم" },
+  { value: "riazi", label: "ریاضی" },
+  { value: "tafakor", label: "تفکر" },
+];
+
 const Admin = () => {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [siteContent, setSiteContent] = useState<SiteContent[]>([]);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
+  const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
   const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1" });
   const [newClass, setNewClass] = useState({ grade: "7/1", title: "", link: "" });
+  const [newJozveh, setNewJozveh] = useState({ grade: "7/1", subject: "olom", title: "", link: "" });
   
-  const [mainTitle, setMainTitle] = useState("");
-  const [mainDescription, setMainDescription] = useState("");
-  const [editedAddresses, setEditedAddresses] = useState<Record<string, { address: string; phone: string }>>({});
+  // Student edit dialog
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editStudentGrade, setEditStudentGrade] = useState("");
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -77,9 +78,8 @@ const Admin = () => {
     checkAuth();
     fetchMessages();
     fetchStudents();
-    fetchAddresses();
-    fetchSiteContent();
     fetchOnlineClasses();
+    fetchJozveh();
   }, []);
 
   const checkAuth = () => {
@@ -121,36 +121,6 @@ const Admin = () => {
     }
   };
 
-  const fetchAddresses = async () => {
-    const { data, error } = await (supabase as any)
-      .from("addresses")
-      .select("*")
-      .order("sort_order", { ascending: true });
-
-    if (!error && data) {
-      setAddresses(data);
-      const initial: Record<string, { address: string; phone: string }> = {};
-      data.forEach((addr: Address) => {
-        initial[addr.id] = { address: addr.address, phone: addr.phone };
-      });
-      setEditedAddresses(initial);
-    }
-  };
-
-  const fetchSiteContent = async () => {
-    const { data, error } = await (supabase as any)
-      .from("site_content")
-      .select("*");
-
-    if (!error && data) {
-      setSiteContent(data);
-      const title = data.find((c: SiteContent) => c.key === "main_title");
-      const desc = data.find((c: SiteContent) => c.key === "main_description");
-      if (title) setMainTitle(title.value);
-      if (desc) setMainDescription(desc.value);
-    }
-  };
-
   const fetchOnlineClasses = async () => {
     const { data, error } = await (supabase as any)
       .from("online_classes")
@@ -162,66 +132,20 @@ const Admin = () => {
     }
   };
 
+  const fetchJozveh = async () => {
+    const { data, error } = await (supabase as any)
+      .from("jozveh")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setJozvehList(data);
+    }
+  };
+
   const handleLogout = () => {
     customAuth.logout();
     navigate("/login");
-  };
-
-  const saveContent = async () => {
-    setLoading(true);
-    try {
-      await (supabase as any)
-        .from("site_content")
-        .update({ value: mainTitle, updated_at: new Date().toISOString() })
-        .eq("key", "main_title");
-
-      await (supabase as any)
-        .from("site_content")
-        .update({ value: mainDescription, updated_at: new Date().toISOString() })
-        .eq("key", "main_description");
-
-      toast({
-        title: "ذخیره شد",
-        description: "محتوا با موفقیت ذخیره شد",
-      });
-    } catch (error: any) {
-      toast({
-        title: "خطا",
-        description: "ذخیره محتوا با مشکل مواجه شد",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveAddress = async (addressId: string) => {
-    setLoading(true);
-    try {
-      const edited = editedAddresses[addressId];
-      await (supabase as any)
-        .from("addresses")
-        .update({ 
-          address: edited.address, 
-          phone: edited.phone,
-          updated_at: new Date().toISOString() 
-        })
-        .eq("id", addressId);
-
-      toast({
-        title: "ذخیره شد",
-        description: "آدرس با موفقیت ذخیره شد",
-      });
-      fetchAddresses();
-    } catch (error: any) {
-      toast({
-        title: "خطا",
-        description: "ذخیره آدرس با مشکل مواجه شد",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
   };
 
   const deleteMessage = async (messageId: string) => {
@@ -329,6 +253,42 @@ const Admin = () => {
     }
   };
 
+  const openEditStudent = (student: Student) => {
+    setEditingStudent(student);
+    setEditStudentGrade(student.grade);
+    setEditDialogOpen(true);
+  };
+
+  const saveStudentGrade = async () => {
+    if (!editingStudent) return;
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from("students")
+        .update({ grade: editStudentGrade })
+        .eq("id", editingStudent.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "موفقیت‌آمیز",
+        description: "پایه دانش‌آموز با موفقیت تغییر کرد",
+      });
+      setEditDialogOpen(false);
+      setEditingStudent(null);
+      fetchStudents();
+    } catch (error: any) {
+      toast({
+        title: "خطا",
+        description: "تغییر پایه با مشکل مواجه شد",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const createOnlineClass = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -387,25 +347,82 @@ const Admin = () => {
     }
   };
 
+  const createJozveh = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { error } = await (supabase as any)
+        .from("jozveh")
+        .insert({
+          grade: newJozveh.grade,
+          subject: newJozveh.subject,
+          title: newJozveh.title,
+          link: newJozveh.link,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "موفقیت‌آمیز",
+        description: "جزوه با موفقیت ایجاد شد",
+      });
+
+      setNewJozveh({ grade: "7/1", subject: "olom", title: "", link: "" });
+      fetchJozveh();
+    } catch (error: any) {
+      toast({
+        title: "خطا",
+        description: error.message || "ایجاد جزوه با مشکل مواجه شد",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteJozveh = async (jozvehId: string) => {
+    if (!confirm("آیا از حذف این جزوه اطمینان دارید؟")) return;
+
+    try {
+      const { error } = await (supabase as any)
+        .from("jozveh")
+        .delete()
+        .eq("id", jozvehId);
+
+      if (error) throw error;
+
+      toast({
+        title: "حذف شد",
+        description: "جزوه با موفقیت حذف شد",
+      });
+      fetchJozveh();
+    } catch (error: any) {
+      toast({
+        title: "خطا",
+        description: "حذف جزوه با مشکل مواجه شد",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getGradeLabel = (grade: string) => {
     const found = GRADE_OPTIONS.find(g => g.value === grade);
     return found ? found.label : grade;
   };
 
-  const updateAddressField = (id: string, field: "address" | "phone", value: string) => {
-    setEditedAddresses(prev => ({
-      ...prev,
-      [id]: { ...prev[id], [field]: value }
-    }));
+  const getSubjectLabel = (subject: string) => {
+    const found = SUBJECT_OPTIONS.find(s => s.value === subject);
+    return found ? found.label : subject;
   };
 
   return (
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       
-      <main className="pt-24 pb-12 px-4">
+      <main className="pt-20 pb-12 px-4">
         <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 animate-fade-in" dir="rtl">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 animate-fade-in" dir="rtl">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
               پنل مدیریت
             </h1>
@@ -419,23 +436,28 @@ const Admin = () => {
             </Button>
           </div>
 
-          <Tabs defaultValue="students" className="w-full animate-slide-up" dir="rtl">
-            <TabsList className="grid w-full grid-cols-5 mb-8">
-              <TabsTrigger value="students" className="gap-2 text-xs sm:text-sm">
-                <Users className="w-4 h-4 hidden sm:block" />
-                دانش‌آموزان
+          <Tabs defaultValue="students" className="w-full" dir="rtl">
+            <TabsList className="grid w-full grid-cols-4 mb-6 h-auto p-1">
+              <TabsTrigger value="students" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">دانش‌آموزان</span>
               </TabsTrigger>
-              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm">
-                <Video className="w-4 h-4 hidden sm:block" />
-                کلاس‌ها
+              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
+                <Video className="w-4 h-4" />
+                <span className="hidden sm:inline">کلاس‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="content" className="text-xs sm:text-sm">محتوا</TabsTrigger>
-              <TabsTrigger value="addresses" className="text-xs sm:text-sm">آدرس‌ها</TabsTrigger>
-              <TabsTrigger value="messages" className="text-xs sm:text-sm">پیام‌ها</TabsTrigger>
+              <TabsTrigger value="jozveh" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
+                <BookOpen className="w-4 h-4" />
+                <span className="hidden sm:inline">جزوه‌ها</span>
+              </TabsTrigger>
+              <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
+                <MessageSquare className="w-4 h-4" />
+                <span className="hidden sm:inline">پیام‌ها</span>
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="students" className="space-y-6">
-              <Card className="p-6 border-2 hover:border-foreground/20 transition-colors">
+            <TabsContent value="students" className="space-y-6 animate-fade-in">
+              <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300 hover:shadow-lg">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <UserPlus className="w-5 h-5" />
                   افزودن دانش‌آموز جدید
@@ -446,14 +468,14 @@ const Admin = () => {
                     value={newStudent.name}
                     onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
                     required
-                    className="text-right"
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
                   />
                   <Input
                     placeholder="نام کاربری"
                     value={newStudent.username}
                     onChange={(e) => setNewStudent({ ...newStudent, username: e.target.value })}
                     required
-                    className="text-right"
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
                   />
                   <Input
                     placeholder="رمز عبور"
@@ -461,7 +483,7 @@ const Admin = () => {
                     value={newStudent.password}
                     onChange={(e) => setNewStudent({ ...newStudent, password: e.target.value })}
                     required
-                    className="text-right"
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
                   />
                   <Select value={newStudent.grade} onValueChange={(value) => setNewStudent({ ...newStudent, grade: value })}>
                     <SelectTrigger className="text-right">
@@ -473,7 +495,7 @@ const Admin = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="submit" disabled={loading} className="w-full">
+                  <Button type="submit" disabled={loading} className="w-full transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     {loading ? "در حال ایجاد..." : "ایجاد دانش‌آموز"}
                   </Button>
                 </form>
@@ -482,19 +504,34 @@ const Admin = () => {
               <Card className="p-6 border-2">
                 <h3 className="text-xl font-bold mb-4">لیست دانش‌آموزان</h3>
                 <div className="space-y-3">
-                  {students.map((student) => (
-                    <div key={student.id} className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 transition-all duration-300">
+                  {students.map((student, index) => (
+                    <div 
+                      key={student.id} 
+                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
                       <div>
                         <p className="font-bold">{student.full_name}</p>
                         <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(student.grade)}</p>
                       </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => deleteStudent(student.id, student.user_id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => openEditStudent(student)}
+                          className="transition-all duration-200 hover:scale-110"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => deleteStudent(student.id, student.user_id)}
+                          className="transition-all duration-200 hover:scale-110"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                   {students.length === 0 && (
@@ -504,8 +541,8 @@ const Admin = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="classes" className="space-y-6">
-              <Card className="p-6 border-2 hover:border-foreground/20 transition-colors">
+            <TabsContent value="classes" className="space-y-6 animate-fade-in">
+              <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300 hover:shadow-lg">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <Plus className="w-5 h-5" />
                   افزودن کلاس آنلاین
@@ -516,14 +553,14 @@ const Admin = () => {
                     value={newClass.title}
                     onChange={(e) => setNewClass({ ...newClass, title: e.target.value })}
                     required
-                    className="text-right"
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
                   />
                   <Input
                     placeholder="لینک کلاس (مثال: meet.google.com/xxx)"
                     value={newClass.link}
                     onChange={(e) => setNewClass({ ...newClass, link: e.target.value })}
                     required
-                    className="text-right"
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
                     dir="ltr"
                   />
                   <Select value={newClass.grade} onValueChange={(value) => setNewClass({ ...newClass, grade: value })}>
@@ -536,7 +573,7 @@ const Admin = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="submit" disabled={loading} className="w-full">
+                  <Button type="submit" disabled={loading} className="w-full transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     {loading ? "در حال ایجاد..." : "ایجاد کلاس"}
                   </Button>
                 </form>
@@ -545,17 +582,22 @@ const Admin = () => {
               <Card className="p-6 border-2">
                 <h3 className="text-xl font-bold mb-4">لیست کلاس‌های آنلاین</h3>
                 <div className="space-y-3">
-                  {onlineClasses.map((cls) => (
-                    <div key={cls.id} className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 transition-all duration-300">
-                      <div>
-                        <p className="font-bold">{cls.title}</p>
+                  {onlineClasses.map((cls, index) => (
+                    <div 
+                      key={cls.id} 
+                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold truncate">{cls.title}</p>
                         <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(cls.grade)}</p>
-                        <p className="text-xs text-muted-foreground" dir="ltr">{cls.link}</p>
+                        <p className="text-xs text-muted-foreground truncate" dir="ltr">{cls.link}</p>
                       </div>
                       <Button
                         variant="destructive"
-                        size="sm"
+                        size="icon"
                         onClick={() => deleteOnlineClass(cls.id)}
+                        className="shrink-0 ml-3 transition-all duration-200 hover:scale-110"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -568,54 +610,88 @@ const Admin = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="content" className="space-y-4">
+            <TabsContent value="jozveh" className="space-y-6 animate-fade-in">
+              <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300 hover:shadow-lg">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Plus className="w-5 h-5" />
+                  افزودن جزوه جدید
+                </h3>
+                <form onSubmit={createJozveh} className="space-y-4">
+                  <Input
+                    placeholder="عنوان جزوه"
+                    value={newJozveh.title}
+                    onChange={(e) => setNewJozveh({ ...newJozveh, title: e.target.value })}
+                    required
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
+                  />
+                  <Input
+                    placeholder="لینک جزوه"
+                    value={newJozveh.link}
+                    onChange={(e) => setNewJozveh({ ...newJozveh, link: e.target.value })}
+                    required
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
+                    dir="ltr"
+                  />
+                  <Select value={newJozveh.subject} onValueChange={(value) => setNewJozveh({ ...newJozveh, subject: value })}>
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="موضوع" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUBJECT_OPTIONS.map(s => (
+                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={newJozveh.grade} onValueChange={(value) => setNewJozveh({ ...newJozveh, grade: value })}>
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="پایه تحصیلی" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GRADE_OPTIONS.map(g => (
+                        <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="submit" disabled={loading} className="w-full transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
+                    {loading ? "در حال ایجاد..." : "ایجاد جزوه"}
+                  </Button>
+                </form>
+              </Card>
+
               <Card className="p-6 border-2">
-                <h3 className="text-lg font-bold mb-4">عنوان صفحه اصلی</h3>
-                <Input 
-                  value={mainTitle}
-                  onChange={(e) => setMainTitle(e.target.value)}
-                  className="text-right mb-4"
-                />
-                <h3 className="text-lg font-bold mb-4">توضیحات</h3>
-                <Textarea 
-                  value={mainDescription}
-                  onChange={(e) => setMainDescription(e.target.value)}
-                  className="text-right"
-                  rows={3}
-                />
-                <Button onClick={saveContent} disabled={loading} className="mt-4">
-                  <Save className="w-4 h-4 ml-2" />
-                  {loading ? "در حال ذخیره..." : "ذخیره تغییرات"}
-                </Button>
+                <h3 className="text-xl font-bold mb-4">لیست جزوه‌ها</h3>
+                <div className="space-y-3">
+                  {jozvehList.map((jozveh, index) => (
+                    <div 
+                      key={jozveh.id} 
+                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold truncate">{jozveh.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          پایه: {getGradeLabel(jozveh.grade)} | موضوع: {getSubjectLabel(jozveh.subject)}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate" dir="ltr">{jozveh.link}</p>
+                      </div>
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        onClick={() => deleteJozveh(jozveh.id)}
+                        className="shrink-0 ml-3 transition-all duration-200 hover:scale-110"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {jozvehList.length === 0 && (
+                    <p className="text-center text-muted-foreground py-8">هیچ جزوه‌ای وجود ندارد</p>
+                  )}
+                </div>
               </Card>
             </TabsContent>
 
-            <TabsContent value="addresses" className="space-y-4">
-              {addresses.map((addr) => (
-                <Card key={addr.id} className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4">{addr.title}</h3>
-                  <Input 
-                    placeholder="آدرس"
-                    value={editedAddresses[addr.id]?.address || ""}
-                    onChange={(e) => updateAddressField(addr.id, "address", e.target.value)}
-                    className="text-right mb-3"
-                  />
-                  <Input 
-                    placeholder="شماره تماس"
-                    value={editedAddresses[addr.id]?.phone || ""}
-                    onChange={(e) => updateAddressField(addr.id, "phone", e.target.value)}
-                    className="text-right"
-                    dir="ltr"
-                  />
-                  <Button onClick={() => saveAddress(addr.id)} disabled={loading} className="mt-4">
-                    <Save className="w-4 h-4 ml-2" />
-                    {loading ? "در حال ذخیره..." : "ذخیره"}
-                  </Button>
-                </Card>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="messages">
+            <TabsContent value="messages" className="animate-fade-in">
               <div className="space-y-4">
                 {messages.length === 0 ? (
                   <Card className="p-12 text-center border-2">
@@ -623,8 +699,13 @@ const Admin = () => {
                     <p className="text-muted-foreground text-lg">هیچ پیامی وجود ندارد</p>
                   </Card>
                 ) : (
-                  messages.map((msg) => (
-                    <Card key={msg.id} className="p-6 hover-lift border-2 hover:border-foreground/20" dir="rtl">
+                  messages.map((msg, index) => (
+                    <Card 
+                      key={msg.id} 
+                      className="p-6 hover-lift border-2 hover:border-foreground/20 transition-all duration-300" 
+                      dir="rtl"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
                       <div className="flex justify-between items-start mb-4">
                         <div>
                           <h4 className="font-bold text-lg">{msg.name}</h4>
@@ -636,8 +717,9 @@ const Admin = () => {
                           </span>
                           <Button
                             variant="destructive"
-                            size="sm"
+                            size="icon"
                             onClick={() => deleteMessage(msg.id)}
+                            className="transition-all duration-200 hover:scale-110"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -652,6 +734,55 @@ const Admin = () => {
           </Tabs>
         </div>
       </main>
+
+      {/* Student Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              ویرایش دانش‌آموز
+            </DialogTitle>
+          </DialogHeader>
+          {editingStudent && (
+            <div className="space-y-4 py-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">نام:</p>
+                <p className="font-bold">{editingStudent.full_name}</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">پایه تحصیلی:</label>
+                <Select value={editStudentGrade} onValueChange={setEditStudentGrade}>
+                  <SelectTrigger className="text-right">
+                    <SelectValue placeholder="پایه تحصیلی" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRADE_OPTIONS.map(g => (
+                      <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button 
+                  onClick={saveStudentGrade} 
+                  disabled={loading}
+                  className="flex-1 transition-all duration-300 hover:scale-[1.02]"
+                >
+                  {loading ? "در حال ذخیره..." : "ذخیره"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setEditDialogOpen(false)}
+                  className="flex-1"
+                >
+                  انصراف
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

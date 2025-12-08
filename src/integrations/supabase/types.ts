@@ -92,6 +92,36 @@ export type Database = {
         }
         Relationships: []
       }
+      jozveh: {
+        Row: {
+          created_at: string
+          grade: string
+          id: string
+          link: string
+          subject: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          grade: string
+          id?: string
+          link: string
+          subject: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          grade?: string
+          id?: string
+          link?: string
+          subject?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       online_classes: {
         Row: {
           created_at: string
