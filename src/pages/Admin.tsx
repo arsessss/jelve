@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
-import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Pencil } from "lucide-react";
+import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText } from "lucide-react";
 
 interface Student {
   id: string;
@@ -18,6 +18,13 @@ interface Student {
   grade: string;
   student_id: string | null;
   user_id: string;
+}
+
+interface StudentGrade {
+  id: string;
+  student_id: string;
+  subject: string;
+  grade: string | null;
 }
 
 interface OnlineClass {
@@ -33,6 +40,7 @@ interface Jozveh {
   subject: string;
   title: string;
   link: string;
+  file_url: string | null;
 }
 
 const GRADE_OPTIONS = [
@@ -64,11 +72,13 @@ const Admin = () => {
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
   const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1" });
   const [newClass, setNewClass] = useState({ grade: "7/1", title: "", link: "" });
-  const [newJozveh, setNewJozveh] = useState({ grade: "7/1", subject: "olom", title: "", link: "" });
+  const [newJozveh, setNewJozveh] = useState({ grade: "7/1", subject: "olom", title: "" });
+  const [jozvehFile, setJozvehFile] = useState<File | null>(null);
+  const jozvehFileRef = useRef<HTMLInputElement>(null);
   
-  // Student edit dialog
+  // Student grades dialog
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [editStudentGrade, setEditStudentGrade] = useState("");
+  const [studentGrades, setStudentGrades] = useState<Record<string, string>>({});
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   const navigate = useNavigate();
@@ -140,6 +150,21 @@ const Admin = () => {
 
     if (!error && data) {
       setJozvehList(data);
+    }
+  };
+
+  const fetchStudentGrades = async (studentId: string) => {
+    const { data, error } = await (supabase as any)
+      .from("student_grades")
+      .select("*")
+      .eq("student_id", studentId);
+
+    if (!error && data) {
+      const grades: Record<string, string> = {};
+      data.forEach((g: StudentGrade) => {
+        grades[g.subject] = g.grade || "";
+      });
+      setStudentGrades(grades);
     }
   };
 
@@ -253,35 +278,45 @@ const Admin = () => {
     }
   };
 
-  const openEditStudent = (student: Student) => {
+  const openEditStudent = async (student: Student) => {
     setEditingStudent(student);
-    setEditStudentGrade(student.grade);
+    setStudentGrades({});
+    await fetchStudentGrades(student.id);
     setEditDialogOpen(true);
   };
 
-  const saveStudentGrade = async () => {
+  const saveStudentGrades = async () => {
     if (!editingStudent) return;
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from("students")
-        .update({ grade: editStudentGrade })
-        .eq("id", editingStudent.id);
+      for (const subject of SUBJECT_OPTIONS) {
+        const gradeValue = studentGrades[subject.value] || "";
+        
+        // Upsert the grade
+        const { error } = await (supabase as any)
+          .from("student_grades")
+          .upsert({
+            student_id: editingStudent.id,
+            subject: subject.value,
+            grade: gradeValue || null,
+          }, {
+            onConflict: 'student_id,subject'
+          });
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       toast({
         title: "موفقیت‌آمیز",
-        description: "پایه دانش‌آموز با موفقیت تغییر کرد",
+        description: "نمرات دانش‌آموز ذخیره شد",
       });
       setEditDialogOpen(false);
       setEditingStudent(null);
-      fetchStudents();
     } catch (error: any) {
       toast({
         title: "خطا",
-        description: "تغییر پایه با مشکل مواجه شد",
+        description: "ذخیره نمرات با مشکل مواجه شد",
         variant: "destructive",
       });
     } finally {
@@ -349,16 +384,40 @@ const Admin = () => {
 
   const createJozveh = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!jozvehFile) {
+      toast({
+        title: "خطا",
+        description: "لطفاً یک فایل انتخاب کنید",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setLoading(true);
 
     try {
+      // Upload file
+      const fileExt = jozvehFile.name.split(".").pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("jozveh-files")
+        .upload(fileName, jozvehFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("jozveh-files")
+        .getPublicUrl(fileName);
+
       const { error } = await (supabase as any)
         .from("jozveh")
         .insert({
           grade: newJozveh.grade,
           subject: newJozveh.subject,
           title: newJozveh.title,
-          link: newJozveh.link,
+          link: urlData.publicUrl,
+          file_url: urlData.publicUrl,
         });
 
       if (error) throw error;
@@ -368,7 +427,9 @@ const Admin = () => {
         description: "جزوه با موفقیت ایجاد شد",
       });
 
-      setNewJozveh({ grade: "7/1", subject: "olom", title: "", link: "" });
+      setNewJozveh({ grade: "7/1", subject: "olom", title: "" });
+      setJozvehFile(null);
+      if (jozvehFileRef.current) jozvehFileRef.current.value = "";
       fetchJozveh();
     } catch (error: any) {
       toast({
@@ -420,9 +481,9 @@ const Admin = () => {
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       
-      <main className="pt-20 pb-12 px-4">
+      <main className="pt-28 pb-12 px-4">
         <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 animate-fade-in" dir="rtl">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 animate-fade-in" dir="rtl">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
               پنل مدیریت
             </h1>
@@ -437,7 +498,7 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="students" className="w-full" dir="rtl">
-            <TabsList className="grid w-full grid-cols-4 mb-6 h-auto p-1">
+            <TabsList className="grid w-full grid-cols-4 mb-8 h-auto p-1">
               <TabsTrigger value="students" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">دانش‌آموزان</span>
@@ -462,7 +523,7 @@ const Admin = () => {
                   <UserPlus className="w-5 h-5" />
                   افزودن دانش‌آموز جدید
                 </h3>
-                <form onSubmit={createStudent} className="space-y-4">
+                <form onSubmit={createStudent} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
                     placeholder="نام و نام خانوادگی"
                     value={newStudent.name}
@@ -495,7 +556,7 @@ const Admin = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="submit" disabled={loading} className="w-full transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
+                  <Button type="submit" disabled={loading} className="sm:col-span-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     {loading ? "در حال ایجاد..." : "ایجاد دانش‌آموز"}
                   </Button>
                 </form>
@@ -503,25 +564,28 @@ const Admin = () => {
 
               <Card className="p-6 border-2">
                 <h3 className="text-xl font-bold mb-4">لیست دانش‌آموزان</h3>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {students.map((student, index) => (
                     <div 
                       key={student.id} 
-                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300"
+                      className="p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 hover:scale-[1.02]"
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
-                      <div>
-                        <p className="font-bold">{student.full_name}</p>
-                        <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(student.grade)}</p>
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="font-bold text-lg">{student.full_name}</p>
+                          <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(student.grade)}</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
-                          size="icon"
+                          size="sm"
                           onClick={() => openEditStudent(student)}
-                          className="transition-all duration-200 hover:scale-110"
+                          className="flex-1 gap-1 transition-all duration-200 hover:scale-105"
                         >
                           <Settings className="w-4 h-4" />
+                          نمرات
                         </Button>
                         <Button
                           variant="destructive"
@@ -535,7 +599,7 @@ const Admin = () => {
                     </div>
                   ))}
                   {students.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">هیچ دانش‌آموزی وجود ندارد</p>
+                    <p className="text-center text-muted-foreground py-8 col-span-full">هیچ دانش‌آموزی وجود ندارد</p>
                   )}
                 </div>
               </Card>
@@ -547,7 +611,7 @@ const Admin = () => {
                   <Plus className="w-5 h-5" />
                   افزودن کلاس آنلاین
                 </h3>
-                <form onSubmit={createOnlineClass} className="space-y-4">
+                <form onSubmit={createOnlineClass} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
                     placeholder="عنوان کلاس (مثال: کلاس آقای صابوری)"
                     value={newClass.title}
@@ -573,7 +637,7 @@ const Admin = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="submit" disabled={loading} className="w-full transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
+                  <Button type="submit" disabled={loading} className="transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     {loading ? "در حال ایجاد..." : "ایجاد کلاس"}
                   </Button>
                 </form>
@@ -581,7 +645,7 @@ const Admin = () => {
 
               <Card className="p-6 border-2">
                 <h3 className="text-xl font-bold mb-4">لیست کلاس‌های آنلاین</h3>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {onlineClasses.map((cls, index) => (
                     <div 
                       key={cls.id} 
@@ -604,7 +668,7 @@ const Admin = () => {
                     </div>
                   ))}
                   {onlineClasses.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">هیچ کلاسی وجود ندارد</p>
+                    <p className="text-center text-muted-foreground py-8 col-span-full">هیچ کلاسی وجود ندارد</p>
                   )}
                 </div>
               </Card>
@@ -616,7 +680,7 @@ const Admin = () => {
                   <Plus className="w-5 h-5" />
                   افزودن جزوه جدید
                 </h3>
-                <form onSubmit={createJozveh} className="space-y-4">
+                <form onSubmit={createJozveh} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
                     placeholder="عنوان جزوه"
                     value={newJozveh.title}
@@ -624,14 +688,24 @@ const Admin = () => {
                     required
                     className="text-right transition-all duration-200 focus:scale-[1.01]"
                   />
-                  <Input
-                    placeholder="لینک جزوه"
-                    value={newJozveh.link}
-                    onChange={(e) => setNewJozveh({ ...newJozveh, link: e.target.value })}
-                    required
-                    className="text-right transition-all duration-200 focus:scale-[1.01]"
-                    dir="ltr"
-                  />
+                  <div className="relative">
+                    <input
+                      type="file"
+                      ref={jozvehFileRef}
+                      onChange={(e) => setJozvehFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.png,.jpeg"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => jozvehFileRef.current?.click()}
+                      className="w-full gap-2 justify-start"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {jozvehFile ? jozvehFile.name : "انتخاب فایل"}
+                    </Button>
+                  </div>
                   <Select value={newJozveh.subject} onValueChange={(value) => setNewJozveh({ ...newJozveh, subject: value })}>
                     <SelectTrigger className="text-right">
                       <SelectValue placeholder="موضوع" />
@@ -652,27 +726,29 @@ const Admin = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="submit" disabled={loading} className="w-full transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
-                    {loading ? "در حال ایجاد..." : "ایجاد جزوه"}
+                  <Button type="submit" disabled={loading || !jozvehFile} className="sm:col-span-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
+                    {loading ? "در حال آپلود..." : "ایجاد جزوه"}
                   </Button>
                 </form>
               </Card>
 
               <Card className="p-6 border-2">
                 <h3 className="text-xl font-bold mb-4">لیست جزوه‌ها</h3>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {jozvehList.map((jozveh, index) => (
                     <div 
                       key={jozveh.id} 
                       className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300"
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold truncate">{jozveh.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          پایه: {getGradeLabel(jozveh.grade)} | موضوع: {getSubjectLabel(jozveh.subject)}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate" dir="ltr">{jozveh.link}</p>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <FileText className="w-8 h-8 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-bold truncate">{jozveh.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            پایه: {getGradeLabel(jozveh.grade)} | {getSubjectLabel(jozveh.subject)}
+                          </p>
+                        </div>
                       </div>
                       <Button
                         variant="destructive"
@@ -685,16 +761,16 @@ const Admin = () => {
                     </div>
                   ))}
                   {jozvehList.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">هیچ جزوه‌ای وجود ندارد</p>
+                    <p className="text-center text-muted-foreground py-8 col-span-full">هیچ جزوه‌ای وجود ندارد</p>
                   )}
                 </div>
               </Card>
             </TabsContent>
 
             <TabsContent value="messages" className="animate-fade-in">
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {messages.length === 0 ? (
-                  <Card className="p-12 text-center border-2">
+                  <Card className="p-12 text-center border-2 col-span-full">
                     <MessageSquare className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
                     <p className="text-muted-foreground text-lg">هیچ پیامی وجود ندارد</p>
                   </Card>
@@ -725,7 +801,7 @@ const Admin = () => {
                           </Button>
                         </div>
                       </div>
-                      <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                      <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap line-clamp-3">{msg.message}</p>
                     </Card>
                   ))
                 )}
@@ -735,41 +811,41 @@ const Admin = () => {
         </div>
       </main>
 
-      {/* Student Edit Dialog */}
+      {/* Student Grades Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent dir="rtl" className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="w-5 h-5" />
-              ویرایش دانش‌آموز
+              <Settings className="w-5 h-5" />
+              نمرات دانش‌آموز
             </DialogTitle>
+            <DialogDescription>
+              نمرات دروس مختلف را برای {editingStudent?.full_name} وارد کنید
+            </DialogDescription>
           </DialogHeader>
           {editingStudent && (
             <div className="space-y-4 py-4">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">نام:</p>
-                <p className="font-bold">{editingStudent.full_name}</p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">پایه تحصیلی:</label>
-                <Select value={editStudentGrade} onValueChange={setEditStudentGrade}>
-                  <SelectTrigger className="text-right">
-                    <SelectValue placeholder="پایه تحصیلی" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GRADE_OPTIONS.map(g => (
-                      <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {SUBJECT_OPTIONS.map((subject) => (
+                <div key={subject.value} className="flex items-center gap-4">
+                  <label className="text-sm font-medium w-20">{subject.label}:</label>
+                  <Input
+                    placeholder="نمره"
+                    value={studentGrades[subject.value] || ""}
+                    onChange={(e) => setStudentGrades(prev => ({
+                      ...prev,
+                      [subject.value]: e.target.value
+                    }))}
+                    className="flex-1 text-right"
+                  />
+                </div>
+              ))}
               <div className="flex gap-2 pt-4">
                 <Button 
-                  onClick={saveStudentGrade} 
+                  onClick={saveStudentGrades} 
                   disabled={loading}
                   className="flex-1 transition-all duration-300 hover:scale-[1.02]"
                 >
-                  {loading ? "در حال ذخیره..." : "ذخیره"}
+                  {loading ? "در حال ذخیره..." : "ذخیره نمرات"}
                 </Button>
                 <Button 
                   variant="outline" 

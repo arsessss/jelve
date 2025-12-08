@@ -3,20 +3,25 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth, AuthSession } from "@/lib/auth";
-import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText } from "lucide-react";
+import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText, Download } from "lucide-react";
 
 interface StudentData {
   id: string;
   full_name: string;
   grade: string;
   student_id: string | null;
+}
+
+interface StudentGrade {
+  subject: string;
+  grade: string | null;
 }
 
 interface OnlineClass {
@@ -32,6 +37,7 @@ interface Jozveh {
   subject: string;
   title: string;
   link: string;
+  file_url: string | null;
 }
 
 interface CustomUser {
@@ -68,6 +74,7 @@ const Student = () => {
   const [userData, setUserData] = useState<CustomUser | null>(null);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
+  const [myGrades, setMyGrades] = useState<StudentGrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -104,6 +111,7 @@ const Student = () => {
     if (studentData) {
       fetchOnlineClasses(studentData.grade);
       fetchJozveh(studentData.grade);
+      fetchMyGrades(studentData.id);
     }
   }, [studentData]);
 
@@ -156,6 +164,17 @@ const Student = () => {
     }
   };
 
+  const fetchMyGrades = async (studentId: string) => {
+    const { data, error } = await (supabase as any)
+      .from("student_grades")
+      .select("subject, grade")
+      .eq("student_id", studentId);
+
+    if (!error && data) {
+      setMyGrades(data);
+    }
+  };
+
   const handleLogout = () => {
     customAuth.logout();
     navigate("/login");
@@ -169,6 +188,11 @@ const Student = () => {
   const getSubjectLabel = (subject: string) => {
     const found = SUBJECT_OPTIONS.find(s => s.value === subject);
     return found ? found.label : subject;
+  };
+
+  const getMyGradeForSubject = (subject: string) => {
+    const found = myGrades.find(g => g.subject === subject);
+    return found?.grade || "—";
   };
 
   const handlePasswordChange = async () => {
@@ -291,9 +315,9 @@ const Student = () => {
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       
-      <main className="pt-20 pb-12 px-4">
+      <main className="pt-28 pb-12 px-4">
         <div className="container mx-auto max-w-4xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 animate-fade-in" dir="rtl">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 animate-fade-in" dir="rtl">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
               پنل دانش‌آموز
             </h1>
@@ -308,6 +332,7 @@ const Student = () => {
                 <DialogContent dir="rtl" className="sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>تنظیمات حساب</DialogTitle>
+                    <DialogDescription>تصویر پروفایل و رمز عبور خود را تغییر دهید</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-6 py-4">
                     {/* Profile Picture */}
@@ -419,12 +444,12 @@ const Student = () => {
                         <p className="text-muted-foreground">هیچ کلاس آنلاینی برای پایه شما وجود ندارد</p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {onlineClasses.map((cls, index) => (
                           <div
                             key={cls.id}
                             onClick={() => handleLinkClick(cls.link)}
-                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.01]"
+                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.02]"
                             style={{ animationDelay: `${index * 50}ms` }}
                           >
                             <div className="flex items-center gap-3">
@@ -439,11 +464,32 @@ const Student = () => {
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="jozveh" className="animate-fade-in">
+                <TabsContent value="jozveh" className="space-y-6 animate-fade-in">
+                  {/* My Grades Section */}
+                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
+                    <div className="flex items-center gap-3 mb-6">
+                      <GraduationCap className="w-8 h-8 text-foreground" />
+                      <h3 className="text-xl font-bold">نمرات من</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-4">
+                      {SUBJECT_OPTIONS.map((subject) => (
+                        <div 
+                          key={subject.value} 
+                          className="p-4 bg-muted/50 rounded-lg border border-border text-center transition-all duration-300 hover:scale-[1.02]"
+                        >
+                          <p className="text-sm text-muted-foreground mb-1">{subject.label}</p>
+                          <p className="text-2xl font-bold">{getMyGradeForSubject(subject.value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+
+                  {/* Jozveh Section */}
                   <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
                     <div className="flex items-center gap-3 mb-6">
                       <BookOpen className="w-8 h-8 text-foreground" />
-                      <h3 className="text-xl font-bold">جزوه و نمره</h3>
+                      <h3 className="text-xl font-bold">جزوه‌ها</h3>
                     </div>
                     
                     {jozvehList.length === 0 ? (
@@ -452,12 +498,12 @@ const Student = () => {
                         <p className="text-muted-foreground">هیچ جزوه‌ای برای پایه شما وجود ندارد</p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {jozvehList.map((jozveh, index) => (
                           <div
                             key={jozveh.id}
-                            onClick={() => handleLinkClick(jozveh.link)}
-                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.01]"
+                            onClick={() => handleLinkClick(jozveh.file_url || jozveh.link)}
+                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.02]"
                             style={{ animationDelay: `${index * 50}ms` }}
                           >
                             <div className="flex items-center gap-3">
@@ -469,7 +515,7 @@ const Student = () => {
                                 </p>
                               </div>
                             </div>
-                            <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-all duration-300 group-hover:translate-x-[-4px]" />
+                            <Download className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-all duration-300 group-hover:translate-y-[2px]" />
                           </div>
                         ))}
                       </div>
