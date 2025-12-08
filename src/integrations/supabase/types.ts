@@ -95,6 +95,7 @@ export type Database = {
       jozveh: {
         Row: {
           created_at: string
+          file_url: string | null
           grade: string
           id: string
           link: string
@@ -104,6 +105,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          file_url?: string | null
           grade: string
           id?: string
           link: string
@@ -113,6 +115,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          file_url?: string | null
           grade?: string
           id?: string
           link?: string
@@ -169,6 +172,41 @@ export type Database = {
           value?: string
         }
         Relationships: []
+      }
+      student_grades: {
+        Row: {
+          created_at: string
+          grade: string | null
+          id: string
+          student_id: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          grade?: string | null
+          id?: string
+          student_id: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          grade?: string | null
+          id?: string
+          student_id?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_grades_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       students: {
         Row: {
