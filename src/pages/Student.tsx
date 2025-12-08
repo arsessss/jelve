@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth, AuthSession } from "@/lib/auth";
-import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User } from "lucide-react";
+import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText } from "lucide-react";
 
 interface StudentData {
   id: string;
@@ -21,6 +22,14 @@ interface StudentData {
 interface OnlineClass {
   id: string;
   grade: string;
+  title: string;
+  link: string;
+}
+
+interface Jozveh {
+  id: string;
+  grade: string;
+  subject: string;
   title: string;
   link: string;
 }
@@ -47,11 +56,18 @@ const GRADE_OPTIONS = [
   { value: "9/4", label: "۹/۴" },
 ];
 
+const SUBJECT_OPTIONS = [
+  { value: "olom", label: "علوم" },
+  { value: "riazi", label: "ریاضی" },
+  { value: "tafakor", label: "تفکر" },
+];
+
 const Student = () => {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [studentData, setStudentData] = useState<StudentData | null>(null);
   const [userData, setUserData] = useState<CustomUser | null>(null);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
+  const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -87,6 +103,7 @@ const Student = () => {
   useEffect(() => {
     if (studentData) {
       fetchOnlineClasses(studentData.grade);
+      fetchJozveh(studentData.grade);
     }
   }, [studentData]);
 
@@ -127,6 +144,18 @@ const Student = () => {
     }
   };
 
+  const fetchJozveh = async (grade: string) => {
+    const { data, error } = await (supabase as any)
+      .from("jozveh")
+      .select("*")
+      .eq("grade", grade)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setJozvehList(data);
+    }
+  };
+
   const handleLogout = () => {
     customAuth.logout();
     navigate("/login");
@@ -135,6 +164,11 @@ const Student = () => {
   const getGradeLabel = (grade: string) => {
     const found = GRADE_OPTIONS.find(g => g.value === grade);
     return found ? found.label : grade;
+  };
+
+  const getSubjectLabel = (subject: string) => {
+    const found = SUBJECT_OPTIONS.find(s => s.value === subject);
+    return found ? found.label : subject;
   };
 
   const handlePasswordChange = async () => {
@@ -234,7 +268,7 @@ const Student = () => {
     }
   };
 
-  const handleClassClick = (link: string) => {
+  const handleLinkClick = (link: string) => {
     let url = link;
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       url = "https://" + url;
@@ -245,7 +279,10 @@ const Student = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-lg">در حال بارگذاری...</p>
+        <div className="animate-pulse flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-muted"></div>
+          <p className="text-lg text-muted-foreground">در حال بارگذاری...</p>
+        </div>
       </div>
     );
   }
@@ -254,16 +291,16 @@ const Student = () => {
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       
-      <main className="pt-24 pb-12 px-4">
+      <main className="pt-20 pb-12 px-4">
         <div className="container mx-auto max-w-4xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 animate-fade-in" dir="rtl">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 animate-fade-in" dir="rtl">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
               پنل دانش‌آموز
             </h1>
             <div className="flex items-center gap-2">
               <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="gap-2">
+                  <Button variant="outline" className="gap-2 transition-all duration-300 hover:scale-105">
                     <Settings className="w-4 h-4" />
                     تنظیمات
                   </Button>
@@ -275,7 +312,7 @@ const Student = () => {
                   <div className="space-y-6 py-4">
                     {/* Profile Picture */}
                     <div className="flex flex-col items-center gap-4">
-                      <Avatar className="w-24 h-24 border-2 border-border">
+                      <Avatar className="w-24 h-24 border-2 border-border transition-all duration-300 hover:scale-105">
                         <AvatarImage src={userData?.profile_picture || undefined} />
                         <AvatarFallback>
                           <User className="w-12 h-12 text-muted-foreground" />
@@ -292,7 +329,7 @@ const Student = () => {
                         variant="outline"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
-                        className="gap-2"
+                        className="gap-2 transition-all duration-300 hover:scale-105"
                       >
                         <Camera className="w-4 h-4" />
                         {uploading ? "در حال آپلود..." : "تغییر تصویر"}
@@ -310,16 +347,16 @@ const Student = () => {
                         placeholder="رمز عبور جدید"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="text-right"
+                        className="text-right transition-all duration-200 focus:scale-[1.01]"
                       />
                       <Input
                         type="password"
                         placeholder="تکرار رمز عبور جدید"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="text-right"
+                        className="text-right transition-all duration-200 focus:scale-[1.01]"
                       />
-                      <Button onClick={handlePasswordChange} className="w-full">
+                      <Button onClick={handlePasswordChange} className="w-full transition-all duration-300 hover:scale-[1.02]">
                         ذخیره رمز عبور
                       </Button>
                     </div>
@@ -338,10 +375,10 @@ const Student = () => {
           </div>
 
           {studentData && (
-            <div className="space-y-6 animate-slide-up">
-              <Card className="p-6 border-2 hover:border-foreground/20 transition-colors" dir="rtl">
-                <div className="flex items-center gap-4 mb-6">
-                  <Avatar className="w-16 h-16 border-2 border-border">
+            <div className="space-y-6">
+              <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300 animate-fade-in" dir="rtl">
+                <div className="flex items-center gap-4">
+                  <Avatar className="w-16 h-16 border-2 border-border transition-all duration-300 hover:scale-105">
                     <AvatarImage src={userData?.profile_picture || undefined} />
                     <AvatarFallback>
                       <GraduationCap className="w-8 h-8 text-muted-foreground" />
@@ -357,34 +394,89 @@ const Student = () => {
                 </div>
               </Card>
 
-              <Card className="p-6 border-2 hover:border-foreground/20 transition-colors" dir="rtl">
-                <div className="flex items-center gap-3 mb-6">
-                  <Video className="w-8 h-8 text-primary" />
-                  <h3 className="text-xl font-bold">کلاس‌های آنلاین</h3>
-                </div>
-                
-                {onlineClasses.length === 0 ? (
-                  <div className="p-8 bg-muted/50 rounded-lg text-center">
-                    <p className="text-muted-foreground">هیچ کلاس آنلاینی برای پایه شما وجود ندارد</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {onlineClasses.map((cls) => (
-                      <div
-                        key={cls.id}
-                        onClick={() => handleClassClick(cls.link)}
-                        className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Video className="w-5 h-5 text-primary" />
-                          <span className="font-medium">{cls.title}</span>
-                        </div>
-                        <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              <Tabs defaultValue="classes" className="w-full animate-slide-up" dir="rtl">
+                <TabsList className="grid w-full grid-cols-2 mb-6 h-auto p-1">
+                  <TabsTrigger value="classes" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
+                    <Video className="w-4 h-4" />
+                    کلاس‌های آنلاین
+                  </TabsTrigger>
+                  <TabsTrigger value="jozveh" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
+                    <BookOpen className="w-4 h-4" />
+                    جزوه و نمره
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="classes" className="animate-fade-in">
+                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
+                    <div className="flex items-center gap-3 mb-6">
+                      <Video className="w-8 h-8 text-foreground" />
+                      <h3 className="text-xl font-bold">کلاس‌های آنلاین</h3>
+                    </div>
+                    
+                    {onlineClasses.length === 0 ? (
+                      <div className="p-8 bg-muted/50 rounded-lg text-center">
+                        <Video className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                        <p className="text-muted-foreground">هیچ کلاس آنلاینی برای پایه شما وجود ندارد</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
+                    ) : (
+                      <div className="space-y-3">
+                        {onlineClasses.map((cls, index) => (
+                          <div
+                            key={cls.id}
+                            onClick={() => handleLinkClick(cls.link)}
+                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.01]"
+                            style={{ animationDelay: `${index * 50}ms` }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Video className="w-5 h-5 text-foreground" />
+                              <span className="font-medium">{cls.title}</span>
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-all duration-300 group-hover:translate-x-[-4px]" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="jozveh" className="animate-fade-in">
+                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
+                    <div className="flex items-center gap-3 mb-6">
+                      <BookOpen className="w-8 h-8 text-foreground" />
+                      <h3 className="text-xl font-bold">جزوه و نمره</h3>
+                    </div>
+                    
+                    {jozvehList.length === 0 ? (
+                      <div className="p-8 bg-muted/50 rounded-lg text-center">
+                        <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                        <p className="text-muted-foreground">هیچ جزوه‌ای برای پایه شما وجود ندارد</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {jozvehList.map((jozveh, index) => (
+                          <div
+                            key={jozveh.id}
+                            onClick={() => handleLinkClick(jozveh.link)}
+                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.01]"
+                            style={{ animationDelay: `${index * 50}ms` }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-5 h-5 text-foreground" />
+                              <div>
+                                <span className="font-medium">{jozveh.title}</span>
+                                <p className="text-xs text-muted-foreground">
+                                  {getSubjectLabel(jozveh.subject)}
+                                </p>
+                              </div>
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-all duration-300 group-hover:translate-x-[-4px]" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </div>
           )}
         </div>
