@@ -57,14 +57,18 @@ serve(async (req) => {
     }
 
     // Get user role
-    const { data: roleData } = await supabase
+    const { data: roleData, error: roleError } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', session.user_id)
       .single();
 
-    const userRole = roleData?.role || null;
+    console.log('Role lookup for user:', session.user_id, 'Result:', roleData, 'Error:', roleError);
+
+    const userRole: string | null = roleData?.role || null;
     const isAdmin = userRole === 'admin';
+
+    console.log('User role:', userRole, 'isAdmin:', isAdmin, 'Action:', action, 'Table:', table);
 
     // Define allowed operations per table and role
     const permissions: Record<string, { read: string[]; write: string[]; delete: string[] }> = {
@@ -85,10 +89,12 @@ serve(async (req) => {
       );
     }
 
-    // Check permissions
-    const canRead = tablePerms.read.includes(userRole) || tablePerms.read.includes('*');
-    const canWrite = tablePerms.write.includes(userRole);
-    const canDelete = tablePerms.delete.includes(userRole);
+    // Check permissions - handle null role
+    const canRead = userRole !== null && (tablePerms.read.includes(userRole) || tablePerms.read.includes('*'));
+    const canWrite = userRole !== null && tablePerms.write.includes(userRole);
+    const canDelete = userRole !== null && tablePerms.delete.includes(userRole);
+
+    console.log('Permissions check:', { canRead, canWrite, canDelete, tablePerms });
 
     let result;
     let error;
