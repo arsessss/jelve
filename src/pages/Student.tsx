@@ -77,34 +77,53 @@ const Student = () => {
   const [myGrades, setMyGrades] = useState<StudentGrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    const currentSession = customAuth.getSession();
-    if (!currentSession) {
-      navigate("/login");
-      return;
-    }
+    const validateAndLoadData = async () => {
+      const localSession = customAuth.getSession();
+      if (!localSession) {
+        navigate("/login");
+        return;
+      }
 
-    if (currentSession.role !== "student") {
-      toast({
-        title: "دسترسی غیرمجاز",
-        description: "شما دسترسی به این صفحه ندارید",
-        variant: "destructive",
-      });
-      navigate("/");
-      return;
-    }
+      // Validate session server-side to prevent localStorage manipulation
+      const { valid, session: validatedSession } = await customAuth.validateSession();
+      
+      if (!valid || !validatedSession) {
+        toast({
+          title: "نشست نامعتبر",
+          description: "لطفا دوباره وارد شوید",
+          variant: "destructive",
+        });
+        navigate("/login");
+        return;
+      }
 
-    setSession(currentSession);
-    fetchStudentData(currentSession.user.id);
-    fetchUserData(currentSession.user.id);
+      if (validatedSession.role !== "student") {
+        toast({
+          title: "دسترسی غیرمجاز",
+          description: "شما دسترسی به این صفحه ندارید",
+          variant: "destructive",
+        });
+        navigate("/");
+        return;
+      }
+
+      setSession(validatedSession);
+      fetchStudentData(validatedSession.user.id);
+      fetchUserData(validatedSession.user.id);
+    };
+
+    validateAndLoadData();
   }, [navigate]);
 
   useEffect(() => {
@@ -196,6 +215,15 @@ const Student = () => {
   };
 
   const handlePasswordChange = async () => {
+    if (!currentPassword) {
+      toast({
+        title: "خطا",
+        description: "رمز عبور فعلی الزامی است",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       toast({
         title: "خطا",
@@ -205,36 +233,37 @@ const Student = () => {
       return;
     }
 
-    if (newPassword.length < 4) {
+    if (newPassword.length < 6) {
       toast({
         title: "خطا",
-        description: "رمز عبور باید حداقل ۴ کاراکتر باشد",
+        description: "رمز عبور باید حداقل ۶ کاراکتر باشد",
         variant: "destructive",
       });
       return;
     }
 
-    try {
-      const { error } = await (supabase as any)
-        .from("custom_users")
-        .update({ password_hash: newPassword })
-        .eq("id", session?.user.id);
+    setChangingPassword(true);
+    const { success, error } = await customAuth.changePassword(currentPassword, newPassword);
+    setChangingPassword(false);
 
-      if (error) throw error;
+    if (error) {
+      toast({
+        title: "خطا",
+        description: error,
+        variant: "destructive",
+      });
+      return;
+    }
 
+    if (success) {
       toast({
         title: "موفقیت‌آمیز",
         description: "رمز عبور با موفقیت تغییر کرد",
       });
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       setSettingsOpen(false);
-    } catch (error: any) {
-      toast({
-        title: "خطا",
-        description: "تغییر رمز عبور با مشکل مواجه شد",
-        variant: "destructive",
-      });
     }
   };
 
@@ -369,6 +398,13 @@ const Student = () => {
                       </h4>
                       <Input
                         type="password"
+                        placeholder="رمز عبور فعلی"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="text-right transition-all duration-200 focus:scale-[1.01]"
+                      />
+                      <Input
+                        type="password"
                         placeholder="رمز عبور جدید"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
@@ -381,8 +417,12 @@ const Student = () => {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         className="text-right transition-all duration-200 focus:scale-[1.01]"
                       />
-                      <Button onClick={handlePasswordChange} className="w-full transition-all duration-300 hover:scale-[1.02]">
-                        ذخیره رمز عبور
+                      <Button 
+                        onClick={handlePasswordChange} 
+                        className="w-full transition-all duration-300 hover:scale-[1.02]"
+                        disabled={changingPassword}
+                      >
+                        {changingPassword ? "در حال ذخیره..." : "ذخیره رمز عبور"}
                       </Button>
                     </div>
                   </div>
