@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import { hash } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,8 +42,8 @@ serve(async (req) => {
       }
 
       try {
-        // Hash the plaintext password
-        const hashedPassword = await bcrypt.hash(user.password_hash);
+        // Hash the plaintext password using synchronous approach
+        const hashedPassword = await hash(user.password_hash);
         
         // Update the user's password
         const { error: updateError } = await supabase
@@ -58,7 +58,8 @@ serve(async (req) => {
           console.log(`Migrated password for user: ${user.username}`);
         }
       } catch (hashError) {
-        errors.push(`Failed to hash password for ${user.username}: ${hashError}`);
+        console.error(`Hash error for ${user.username}:`, hashError);
+        errors.push(`Failed to hash password for ${user.username}: ${String(hashError)}`);
       }
     }
 
