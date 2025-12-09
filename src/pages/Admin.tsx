@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
+import { secureApi } from "@/lib/secure-api";
 import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText } from "lucide-react";
 
 interface Student {
@@ -43,6 +44,14 @@ interface Jozveh {
   file_url: string | null;
 }
 
+interface ContactMessage {
+  id: string;
+  name: string;
+  phone: string;
+  message: string;
+  created_at: string;
+}
+
 const GRADE_OPTIONS = [
   { value: "7/1", label: "۷/۱" },
   { value: "7/2", label: "۷/۲" },
@@ -66,7 +75,7 @@ const SUBJECT_OPTIONS = [
 
 const Admin = () => {
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
@@ -86,10 +95,6 @@ const Admin = () => {
 
   useEffect(() => {
     checkAuth();
-    fetchMessages();
-    fetchStudents();
-    fetchOnlineClasses();
-    fetchJozveh();
   }, []);
 
   const checkAuth = async () => {
@@ -119,59 +124,46 @@ const Admin = () => {
         variant: "destructive",
       });
       navigate("/");
+      return;
     }
+
+    // Fetch data after auth is confirmed
+    fetchMessages();
+    fetchStudents();
+    fetchOnlineClasses();
+    fetchJozveh();
   };
 
   const fetchMessages = async () => {
-    const { data, error } = await supabase
-      .from("contact_messages")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await secureApi.select<ContactMessage>('contact_messages');
     if (!error && data) {
       setMessages(data);
     }
   };
 
   const fetchStudents = async () => {
-    const { data, error } = await supabase
-      .from("students")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await secureApi.select<Student>('students');
     if (!error && data) {
       setStudents(data);
     }
   };
 
   const fetchOnlineClasses = async () => {
-    const { data, error } = await (supabase as any)
-      .from("online_classes")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await secureApi.select<OnlineClass>('online_classes');
     if (!error && data) {
       setOnlineClasses(data);
     }
   };
 
   const fetchJozveh = async () => {
-    const { data, error } = await (supabase as any)
-      .from("jozveh")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await secureApi.select<Jozveh>('jozveh');
     if (!error && data) {
       setJozvehList(data);
     }
   };
 
   const fetchStudentGrades = async (studentId: string) => {
-    const { data, error } = await (supabase as any)
-      .from("student_grades")
-      .select("*")
-      .eq("student_id", studentId);
-
+    const { data, error } = await secureApi.select<StudentGrade>('student_grades', { student_id: studentId });
     if (!error && data) {
       const grades: Record<string, string> = {};
       data.forEach((g: StudentGrade) => {
@@ -189,25 +181,19 @@ const Admin = () => {
   const deleteMessage = async (messageId: string) => {
     if (!confirm("آیا از حذف این پیام اطمینان دارید؟")) return;
 
-    try {
-      const { error } = await supabase
-        .from("contact_messages")
-        .delete()
-        .eq("id", messageId);
-
-      if (error) throw error;
-
-      toast({
-        title: "حذف شد",
-        description: "پیام با موفقیت حذف شد",
-      });
-      fetchMessages();
-    } catch (error: any) {
+    const { error } = await secureApi.delete('contact_messages', messageId);
+    if (error) {
       toast({
         title: "خطا",
         description: "حذف پیام با مشکل مواجه شد",
         variant: "destructive",
       });
+    } else {
+      toast({
+        title: "حذف شد",
+        description: "پیام با موفقیت حذف شد",
+      });
+      fetchMessages();
     }
   };
 
@@ -234,7 +220,7 @@ const Admin = () => {
       }
 
       if (userId) {
-        const { error: studentError } = await supabase.from("students").insert({
+        const { error: studentError } = await secureApi.insert('students', {
           user_id: userId,
           full_name: newStudent.name,
           grade: newStudent.grade,
@@ -243,7 +229,7 @@ const Admin = () => {
         if (studentError) {
           toast({
             title: "خطا",
-            description: studentError.message,
+            description: studentError,
             variant: "destructive",
           });
           setLoading(false);
@@ -258,10 +244,11 @@ const Admin = () => {
         setNewStudent({ name: "", username: "", password: "", grade: "7/1" });
         fetchStudents();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "ایجاد دانش‌آموز با مشکل مواجه شد";
       toast({
         title: "خطا",
-        description: error.message || "ایجاد دانش‌آموز با مشکل مواجه شد",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -273,16 +260,16 @@ const Admin = () => {
     if (!confirm("آیا از حذف این دانش‌آموز اطمینان دارید؟")) return;
 
     try {
-      await supabase.from("students").delete().eq("id", studentId);
-      await supabase.from("user_roles").delete().eq("user_id", userId);
-      await (supabase as any).from("custom_users").delete().eq("id", userId);
+      await secureApi.delete('students', studentId);
+      await secureApi.delete('user_roles', userId);
+      await secureApi.delete('custom_users', userId);
       
       toast({
         title: "حذف شد",
         description: "دانش‌آموز با موفقیت حذف شد",
       });
       fetchStudents();
-    } catch (error: any) {
+    } catch {
       toast({
         title: "خطا",
         description: "حذف دانش‌آموز با مشکل مواجه شد",
@@ -306,18 +293,13 @@ const Admin = () => {
       for (const subject of SUBJECT_OPTIONS) {
         const gradeValue = studentGrades[subject.value] || "";
         
-        // Upsert the grade
-        const { error } = await (supabase as any)
-          .from("student_grades")
-          .upsert({
-            student_id: editingStudent.id,
-            subject: subject.value,
-            grade: gradeValue || null,
-          }, {
-            onConflict: 'student_id,subject'
-          });
+        const { error } = await secureApi.upsert('student_grades', {
+          student_id: editingStudent.id,
+          subject: subject.value,
+          grade: gradeValue || null,
+        });
 
-        if (error) throw error;
+        if (error) throw new Error(error);
       }
 
       toast({
@@ -326,7 +308,7 @@ const Admin = () => {
       });
       setEditDialogOpen(false);
       setEditingStudent(null);
-    } catch (error: any) {
+    } catch {
       toast({
         title: "خطا",
         description: "ذخیره نمرات با مشکل مواجه شد",
@@ -342,15 +324,13 @@ const Admin = () => {
     setLoading(true);
 
     try {
-      const { error } = await (supabase as any)
-        .from("online_classes")
-        .insert({
-          grade: newClass.grade,
-          title: newClass.title,
-          link: newClass.link,
-        });
+      const { error } = await secureApi.insert('online_classes', {
+        grade: newClass.grade,
+        title: newClass.title,
+        link: newClass.link,
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       toast({
         title: "موفقیت‌آمیز",
@@ -359,10 +339,11 @@ const Admin = () => {
 
       setNewClass({ grade: "7/1", title: "", link: "" });
       fetchOnlineClasses();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "ایجاد کلاس با مشکل مواجه شد";
       toast({
         title: "خطا",
-        description: error.message || "ایجاد کلاس با مشکل مواجه شد",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -373,25 +354,19 @@ const Admin = () => {
   const deleteOnlineClass = async (classId: string) => {
     if (!confirm("آیا از حذف این کلاس اطمینان دارید؟")) return;
 
-    try {
-      const { error } = await (supabase as any)
-        .from("online_classes")
-        .delete()
-        .eq("id", classId);
-
-      if (error) throw error;
-
-      toast({
-        title: "حذف شد",
-        description: "کلاس با موفقیت حذف شد",
-      });
-      fetchOnlineClasses();
-    } catch (error: any) {
+    const { error } = await secureApi.delete('online_classes', classId);
+    if (error) {
       toast({
         title: "خطا",
         description: "حذف کلاس با مشکل مواجه شد",
         variant: "destructive",
       });
+    } else {
+      toast({
+        title: "حذف شد",
+        description: "کلاس با موفقیت حذف شد",
+      });
+      fetchOnlineClasses();
     }
   };
 
@@ -409,7 +384,7 @@ const Admin = () => {
     setLoading(true);
 
     try {
-      // Upload file
+      // Upload file (storage still uses direct Supabase client as it's public)
       const fileExt = jozvehFile.name.split(".").pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       
@@ -423,17 +398,15 @@ const Admin = () => {
         .from("jozveh-files")
         .getPublicUrl(fileName);
 
-      const { error } = await (supabase as any)
-        .from("jozveh")
-        .insert({
-          grade: newJozveh.grade,
-          subject: newJozveh.subject,
-          title: newJozveh.title,
-          link: urlData.publicUrl,
-          file_url: urlData.publicUrl,
-        });
+      const { error } = await secureApi.insert('jozveh', {
+        grade: newJozveh.grade,
+        subject: newJozveh.subject,
+        title: newJozveh.title,
+        link: urlData.publicUrl,
+        file_url: urlData.publicUrl,
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       toast({
         title: "موفقیت‌آمیز",
@@ -444,10 +417,11 @@ const Admin = () => {
       setJozvehFile(null);
       if (jozvehFileRef.current) jozvehFileRef.current.value = "";
       fetchJozveh();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "ایجاد جزوه با مشکل مواجه شد";
       toast({
         title: "خطا",
-        description: error.message || "ایجاد جزوه با مشکل مواجه شد",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -458,25 +432,19 @@ const Admin = () => {
   const deleteJozveh = async (jozvehId: string) => {
     if (!confirm("آیا از حذف این جزوه اطمینان دارید؟")) return;
 
-    try {
-      const { error } = await (supabase as any)
-        .from("jozveh")
-        .delete()
-        .eq("id", jozvehId);
-
-      if (error) throw error;
-
-      toast({
-        title: "حذف شد",
-        description: "جزوه با موفقیت حذف شد",
-      });
-      fetchJozveh();
-    } catch (error: any) {
+    const { error } = await secureApi.delete('jozveh', jozvehId);
+    if (error) {
       toast({
         title: "خطا",
         description: "حذف جزوه با مشکل مواجه شد",
         variant: "destructive",
       });
+    } else {
+      toast({
+        title: "حذف شد",
+        description: "جزوه با موفقیت حذف شد",
+      });
+      fetchJozveh();
     }
   };
 
@@ -840,34 +808,25 @@ const Admin = () => {
             <div className="space-y-4 py-4">
               {SUBJECT_OPTIONS.map((subject) => (
                 <div key={subject.value} className="flex items-center gap-4">
-                  <label className="text-sm font-medium w-20">{subject.label}:</label>
+                  <label className="w-20 font-medium text-right">{subject.label}:</label>
                   <Input
-                    placeholder="نمره"
                     value={studentGrades[subject.value] || ""}
-                    onChange={(e) => setStudentGrades(prev => ({
-                      ...prev,
+                    onChange={(e) => setStudentGrades({
+                      ...studentGrades,
                       [subject.value]: e.target.value
-                    }))}
+                    })}
+                    placeholder="نمره"
                     className="flex-1 text-right"
                   />
                 </div>
               ))}
-              <div className="flex gap-2 pt-4">
-                <Button 
-                  onClick={saveStudentGrades} 
-                  disabled={loading}
-                  className="flex-1 transition-all duration-300 hover:scale-[1.02]"
-                >
-                  {loading ? "در حال ذخیره..." : "ذخیره نمرات"}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setEditDialogOpen(false)}
-                  className="flex-1"
-                >
-                  انصراف
-                </Button>
-              </div>
+              <Button 
+                onClick={saveStudentGrades} 
+                disabled={loading}
+                className="w-full mt-4"
+              >
+                {loading ? "در حال ذخیره..." : "ذخیره نمرات"}
+              </Button>
             </div>
           )}
         </DialogContent>
