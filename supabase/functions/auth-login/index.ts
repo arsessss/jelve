@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import { compareSync, hashSync } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,15 +44,15 @@ serve(async (req) => {
     // Check if password is already hashed (starts with $2) or plaintext
     let isValidPassword = false;
     if (user.password_hash.startsWith('$2')) {
-      // Password is hashed, use bcrypt compare
-      isValidPassword = await bcrypt.compare(password, user.password_hash);
+      // Password is hashed, use bcrypt compare (sync version for Deno compatibility)
+      isValidPassword = compareSync(password, user.password_hash);
     } else {
       // Legacy plaintext password - compare directly but then hash it
       isValidPassword = user.password_hash === password;
       
       if (isValidPassword) {
-        // Migrate to hashed password
-        const hashedPassword = await bcrypt.hash(password);
+        // Migrate to hashed password (sync version for Deno compatibility)
+        const hashedPassword = hashSync(password);
         await supabase
           .from('custom_users')
           .update({ password_hash: hashedPassword })
