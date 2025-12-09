@@ -11,7 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth, AuthSession } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
-import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText, Download } from "lucide-react";
+import { ChatPanel } from "@/components/ChatPanel";
+import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText, Download, MessageSquare } from "lucide-react";
 
 interface StudentData {
   id: string;
@@ -438,16 +439,24 @@ const Student = () => {
               </Card>
 
               <Tabs defaultValue="classes" className="w-full animate-slide-up" dir="rtl">
-                <TabsList className="grid w-full grid-cols-2 mb-6 h-auto p-1">
+                <TabsList className="grid w-full grid-cols-3 mb-6 h-auto p-1">
                   <TabsTrigger value="classes" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
                     <Video className="w-4 h-4" />
-                    کلاس‌های آنلاین
+                    <span className="hidden sm:inline">کلاس‌ها</span>
                   </TabsTrigger>
                   <TabsTrigger value="jozveh" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
                     <BookOpen className="w-4 h-4" />
-                    جزوه و نمره
+                    <span className="hidden sm:inline">جزوه</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="chat" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
+                    <MessageSquare className="w-4 h-4" />
+                    <span className="hidden sm:inline">پیام‌ها</span>
                   </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="chat" className="animate-fade-in">
+                  <ChatPanel currentUserId={session?.user.id || ''} />
+                </TabsContent>
 
                 <TabsContent value="classes" className="animate-fade-in">
                   <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">

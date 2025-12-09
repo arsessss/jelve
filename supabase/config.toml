@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.data-api]
 verify_jwt = false
+
+[functions.chat-api]
+verify_jwt = false
