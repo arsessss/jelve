@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth, AuthSession } from "@/lib/auth";
+import { secureApi } from "@/lib/secure-api";
 import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText, Download } from "lucide-react";
 
 interface StudentData {
@@ -135,60 +136,36 @@ const Student = () => {
   }, [studentData]);
 
   const fetchStudentData = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("students")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (!error && data) {
-      setStudentData(data);
+    const { data, error } = await secureApi.select<StudentData>('students', { user_id: userId });
+    if (!error && data && data.length > 0) {
+      setStudentData(data[0]);
     }
     setLoading(false);
   };
 
   const fetchUserData = async (userId: string) => {
-    const { data, error } = await (supabase as any)
-      .from("custom_users")
-      .select("id, username, full_name, profile_picture")
-      .eq("id", userId)
-      .single();
-
-    if (!error && data) {
-      setUserData(data);
+    const { data, error } = await secureApi.select<CustomUser>('custom_users', { id: userId });
+    if (!error && data && data.length > 0) {
+      setUserData(data[0]);
     }
   };
 
   const fetchOnlineClasses = async (grade: string) => {
-    const { data, error } = await (supabase as any)
-      .from("online_classes")
-      .select("*")
-      .eq("grade", grade)
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await secureApi.select<OnlineClass>('online_classes', { grade });
     if (!error && data) {
       setOnlineClasses(data);
     }
   };
 
   const fetchJozveh = async (grade: string) => {
-    const { data, error } = await (supabase as any)
-      .from("jozveh")
-      .select("*")
-      .eq("grade", grade)
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await secureApi.select<Jozveh>('jozveh', { grade });
     if (!error && data) {
       setJozvehList(data);
     }
   };
 
   const fetchMyGrades = async (studentId: string) => {
-    const { data, error } = await (supabase as any)
-      .from("student_grades")
-      .select("subject, grade")
-      .eq("student_id", studentId);
-
+    const { data, error } = await secureApi.select<StudentGrade>('student_grades', { student_id: studentId });
     if (!error && data) {
       setMyGrades(data);
     }
@@ -287,6 +264,7 @@ const Student = () => {
       const fileName = `${session?.user.id}-${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
+      // Storage upload uses direct Supabase client (public bucket)
       const { error: uploadError } = await supabase.storage
         .from("profile-pictures")
         .upload(filePath, file, { upsert: true });
@@ -297,12 +275,12 @@ const Student = () => {
         .from("profile-pictures")
         .getPublicUrl(filePath);
 
-      const { error: updateError } = await (supabase as any)
-        .from("custom_users")
-        .update({ profile_picture: urlData.publicUrl })
-        .eq("id", session?.user.id);
+      // Update user profile via secure API
+      const { error: updateError } = await secureApi.update('custom_users', session?.user.id || '', { 
+        profile_picture: urlData.publicUrl 
+      });
 
-      if (updateError) throw updateError;
+      if (updateError) throw new Error(updateError);
 
       setUserData(prev => prev ? { ...prev, profile_picture: urlData.publicUrl } : null);
 
@@ -310,7 +288,7 @@ const Student = () => {
         title: "موفقیت‌آمیز",
         description: "تصویر پروفایل با موفقیت آپلود شد",
       });
-    } catch (error: any) {
+    } catch {
       toast({
         title: "خطا",
         description: "آپلود تصویر با مشکل مواجه شد",
@@ -489,14 +467,16 @@ const Student = () => {
                           <div
                             key={cls.id}
                             onClick={() => handleLinkClick(cls.link)}
-                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.02]"
+                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted cursor-pointer transition-all duration-300 hover:scale-[1.02] group"
                             style={{ animationDelay: `${index * 50}ms` }}
                           >
-                            <div className="flex items-center gap-3">
-                              <Video className="w-5 h-5 text-foreground" />
-                              <span className="font-medium">{cls.title}</span>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Video className="w-5 h-5 text-foreground group-hover:text-primary transition-colors" />
+                                <span className="font-medium">{cls.title}</span>
+                              </div>
+                              <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                             </div>
-                            <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-all duration-300 group-hover:translate-x-[-4px]" />
                           </div>
                         ))}
                       </div>
@@ -505,30 +485,10 @@ const Student = () => {
                 </TabsContent>
 
                 <TabsContent value="jozveh" className="space-y-6 animate-fade-in">
-                  {/* My Grades Section */}
+                  {/* Jozveh List */}
                   <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
                     <div className="flex items-center gap-3 mb-6">
-                      <GraduationCap className="w-8 h-8 text-foreground" />
-                      <h3 className="text-xl font-bold">نمرات من</h3>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-4">
-                      {SUBJECT_OPTIONS.map((subject) => (
-                        <div 
-                          key={subject.value} 
-                          className="p-4 bg-muted/50 rounded-lg border border-border text-center transition-all duration-300 hover:scale-[1.02]"
-                        >
-                          <p className="text-sm text-muted-foreground mb-1">{subject.label}</p>
-                          <p className="text-2xl font-bold">{getMyGradeForSubject(subject.value)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-
-                  {/* Jozveh Section */}
-                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
-                    <div className="flex items-center gap-3 mb-6">
-                      <BookOpen className="w-8 h-8 text-foreground" />
+                      <FileText className="w-8 h-8 text-foreground" />
                       <h3 className="text-xl font-bold">جزوه‌ها</h3>
                     </div>
                     
@@ -542,24 +502,52 @@ const Student = () => {
                         {jozvehList.map((jozveh, index) => (
                           <div
                             key={jozveh.id}
-                            onClick={() => handleLinkClick(jozveh.file_url || jozveh.link)}
-                            className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 cursor-pointer group hover:scale-[1.02]"
+                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 hover:scale-[1.02]"
                             style={{ animationDelay: `${index * 50}ms` }}
                           >
-                            <div className="flex items-center gap-3">
-                              <FileText className="w-5 h-5 text-foreground" />
-                              <div>
-                                <span className="font-medium">{jozveh.title}</span>
-                                <p className="text-xs text-muted-foreground">
-                                  {getSubjectLabel(jozveh.subject)}
-                                </p>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <FileText className="w-5 h-5 text-foreground shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="font-medium truncate">{jozveh.title}</p>
+                                  <p className="text-sm text-muted-foreground">{getSubjectLabel(jozveh.subject)}</p>
+                                </div>
                               </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleLinkClick(jozveh.file_url || jozveh.link)}
+                                className="shrink-0 gap-1"
+                              >
+                                <Download className="w-4 h-4" />
+                                دانلود
+                              </Button>
                             </div>
-                            <Download className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-all duration-300 group-hover:translate-y-[2px]" />
                           </div>
                         ))}
                       </div>
                     )}
+                  </Card>
+
+                  {/* Grades */}
+                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
+                    <div className="flex items-center gap-3 mb-6">
+                      <BookOpen className="w-8 h-8 text-foreground" />
+                      <h3 className="text-xl font-bold">نمرات من</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {SUBJECT_OPTIONS.map((subject, index) => (
+                        <div 
+                          key={subject.value} 
+                          className="p-4 bg-muted/50 rounded-lg border border-border text-center hover:border-foreground/20 transition-all duration-300 hover:scale-105"
+                          style={{ animationDelay: `${index * 100}ms` }}
+                        >
+                          <p className="text-sm text-muted-foreground mb-1">{subject.label}</p>
+                          <p className="text-2xl font-bold">{getMyGradeForSubject(subject.value)}</p>
+                        </div>
+                      ))}
+                    </div>
                   </Card>
                 </TabsContent>
               </Tabs>
