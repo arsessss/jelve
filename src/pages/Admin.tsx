@@ -11,7 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
-import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText } from "lucide-react";
+import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send } from "lucide-react";
+import { AdminChatPanel } from "@/components/AdminChatPanel";
 
 interface Student {
   id: string;
@@ -84,6 +85,7 @@ const Admin = () => {
   const [newJozveh, setNewJozveh] = useState({ grade: "7/1", subject: "olom", title: "" });
   const [jozvehFile, setJozvehFile] = useState<File | null>(null);
   const jozvehFileRef = useRef<HTMLInputElement>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   
   // Student grades dialog
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -126,6 +128,9 @@ const Admin = () => {
       navigate("/");
       return;
     }
+
+    // Store user ID for chat
+    setCurrentUserId(session.user.id);
 
     // Fetch data after auth is confirmed
     fetchMessages();
@@ -479,7 +484,7 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="students" className="w-full" dir="rtl">
-            <TabsList className="grid w-full grid-cols-4 mb-8 h-auto p-1">
+            <TabsList className="grid w-full grid-cols-5 mb-8 h-auto p-1">
               <TabsTrigger value="students" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">دانش‌آموزان</span>
@@ -495,6 +500,10 @@ const Admin = () => {
               <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
                 <MessageSquare className="w-4 h-4" />
                 <span className="hidden sm:inline">پیام‌ها</span>
+              </TabsTrigger>
+              <TabsTrigger value="chat" className="gap-2 text-xs sm:text-sm py-3 data-[state=active]:animate-scale-in">
+                <Send className="w-4 h-4" />
+                <span className="hidden sm:inline">چت</span>
               </TabsTrigger>
             </TabsList>
 
@@ -787,6 +796,10 @@ const Admin = () => {
                   ))
                 )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="chat" className="animate-fade-in">
+              {currentUserId && <AdminChatPanel currentUserId={currentUserId} />}
             </TabsContent>
           </Tabs>
         </div>

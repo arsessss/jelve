@@ -19,9 +19,16 @@ const Home = () => {
           }}>
               مجتمع آموزشی جلوه
             </h1>
-            <p className="text-2xl text-muted-foreground mb-16 max-w-3xl mx-auto animate-slide-up leading-relaxed" dir="rtl">
+            <p className="text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto animate-slide-up leading-relaxed" dir="rtl">
               تربیت نسلی موفق با آموزش باکیفیت
             </p>
+            <a 
+              href="/sport" 
+              className="inline-block px-8 py-4 bg-foreground text-background font-bold text-lg rounded-lg hover:opacity-90 transition-all duration-300 hover:scale-105 animate-fade-in"
+              style={{ animationDelay: '300ms' }}
+            >
+              جلوه اسپورت
+            </a>
           </div>
         </section>
 
