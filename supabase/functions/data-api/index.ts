@@ -77,7 +77,7 @@ serve(async (req) => {
       online_classes: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       jozveh: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       contact_messages: { read: ['admin'], write: [], delete: ['admin'] },
-      custom_users: { read: ['admin'], write: ['admin'], delete: ['admin'] },
+      custom_users: { read: ['admin', 'student'], write: ['admin', 'student'], delete: ['admin'] }, // Students can read/update their own profile
       user_roles: { read: ['admin'], write: ['admin'], delete: ['admin'] },
     };
 
@@ -132,6 +132,10 @@ serve(async (req) => {
             query = query.eq('student_id', studentData.id);
           }
         }
+        // Students can only read their own user record
+        if (!isAdmin && table === 'custom_users') {
+          query = query.eq('id', session.user_id);
+        }
 
         const { data: selectData, error: selectError } = await query.order('created_at', { ascending: false });
         result = selectData;
@@ -163,6 +167,13 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({ error: 'ID is required for update' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // Students can only update their own custom_users record
+        if (!isAdmin && table === 'custom_users' && id !== session.user_id) {
+          return new Response(
+            JSON.stringify({ error: 'Permission denied' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         const { data: updateData, error: updateError } = await supabase.from(table).update(data).eq('id', id).select();
