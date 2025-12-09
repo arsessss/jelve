@@ -7,53 +7,39 @@ export interface CustomUser {
 }
 
 export interface AuthSession {
+  token: string;
   user: CustomUser;
   role: "admin" | "student" | null;
+  expires_at: string;
 }
 
 const SESSION_KEY = "jelve_session";
 
 export const customAuth = {
   async login(username: string, password: string): Promise<{ session: AuthSession | null; error: string | null }> {
-    // Use type assertion to bypass strict typing for custom table
-    const { data: users, error } = await (supabase as any)
-      .from("custom_users")
-      .select("id, username, password_hash, full_name")
-      .eq("username", username)
-      .single();
+    try {
+      const { data, error } = await supabase.functions.invoke('auth-login', {
+        body: { username, password }
+      });
 
-    console.log("Login attempt:", { username, users, error });
+      if (error) {
+        console.error("Login edge function error:", error);
+        return { session: null, error: "خطا در برقراری ارتباط با سرور" };
+      }
 
-    if (error || !users) {
-      console.error("Login error:", error);
-      return { session: null, error: "نام کاربری یا رمز عبور اشتباه است" };
+      if (data.error) {
+        return { session: null, error: data.error };
+      }
+
+      const session = data.session as AuthSession;
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      window.dispatchEvent(new Event("auth-change"));
+
+      return { session, error: null };
+    } catch (err) {
+      console.error("Login error:", err);
+      return { session: null, error: "خطا در برقراری ارتباط با سرور" };
     }
-
-    if (users.password_hash !== password) {
-      return { session: null, error: "نام کاربری یا رمز عبور اشتباه است" };
-    }
-
-    // Get user role
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", users.id);
-
-    const role = roles && roles.length > 0 ? roles[0].role as "admin" | "student" : null;
-
-    const session: AuthSession = {
-      user: {
-        id: users.id,
-        username: users.username,
-        full_name: users.full_name,
-      },
-      role,
-    };
-
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    window.dispatchEvent(new Event("auth-change"));
-
-    return { session, error: null };
   },
 
   logout() {
@@ -65,43 +51,92 @@ export const customAuth = {
     const stored = localStorage.getItem(SESSION_KEY);
     if (!stored) return null;
     try {
-      return JSON.parse(stored) as AuthSession;
+      const session = JSON.parse(stored) as AuthSession;
+      // Check if session is expired
+      if (new Date(session.expires_at) < new Date()) {
+        this.logout();
+        return null;
+      }
+      return session;
     } catch {
       return null;
     }
   },
 
-  async createUser(username: string, password: string, fullName: string, role: "admin" | "student"): Promise<{ userId: string | null; error: string | null }> {
-    // Insert into custom_users
-    const { data: newUser, error: userError } = await (supabase as any)
-      .from("custom_users")
-      .insert({
-        username,
-        password_hash: password,
-        full_name: fullName,
-      })
-      .select("id")
-      .single();
+  async validateSession(): Promise<{ valid: boolean; session: AuthSession | null }> {
+    const stored = this.getSession();
+    if (!stored) return { valid: false, session: null };
 
-    if (userError) {
-      if (userError.code === "23505") {
-        return { userId: null, error: "این نام کاربری قبلاً استفاده شده است" };
-      }
-      return { userId: null, error: userError.message };
-    }
-
-    // Insert role
-    const { error: roleError } = await supabase
-      .from("user_roles")
-      .insert({
-        user_id: newUser.id,
-        role,
+    try {
+      const { data, error } = await supabase.functions.invoke('auth-validate', {
+        body: { token: stored.token }
       });
 
-    if (roleError) {
-      return { userId: null, error: roleError.message };
+      if (error || !data.valid) {
+        this.logout();
+        return { valid: false, session: null };
+      }
+
+      // Update local session with server data
+      const updatedSession: AuthSession = {
+        ...stored,
+        user: data.session.user,
+        role: data.session.role,
+      };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(updatedSession));
+
+      return { valid: true, session: updatedSession };
+    } catch {
+      return { valid: false, session: null };
+    }
+  },
+
+  async createUser(username: string, password: string, fullName: string, role: "admin" | "student"): Promise<{ userId: string | null; error: string | null }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('auth-signup', {
+        body: { username, password, fullName, role }
+      });
+
+      if (error) {
+        console.error("Signup edge function error:", error);
+        return { userId: null, error: "خطا در برقراری ارتباط با سرور" };
+      }
+
+      if (data.error) {
+        return { userId: null, error: data.error };
+      }
+
+      return { userId: data.userId, error: null };
+    } catch (err) {
+      console.error("Signup error:", err);
+      return { userId: null, error: "خطا در برقراری ارتباط با سرور" };
+    }
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; error: string | null }> {
+    const session = this.getSession();
+    if (!session) {
+      return { success: false, error: "لطفا وارد شوید" };
     }
 
-    return { userId: newUser.id, error: null };
+    try {
+      const { data, error } = await supabase.functions.invoke('auth-change-password', {
+        body: { token: session.token, currentPassword, newPassword }
+      });
+
+      if (error) {
+        console.error("Change password edge function error:", error);
+        return { success: false, error: "خطا در برقراری ارتباط با سرور" };
+      }
+
+      if (data.error) {
+        return { success: false, error: data.error };
+      }
+
+      return { success: true, error: null };
+    } catch (err) {
+      console.error("Change password error:", err);
+      return { success: false, error: "خطا در برقراری ارتباط با سرور" };
+    }
   },
 };

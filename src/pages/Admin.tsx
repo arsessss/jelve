@@ -92,9 +92,22 @@ const Admin = () => {
     fetchJozveh();
   }, []);
 
-  const checkAuth = () => {
-    const session = customAuth.getSession();
-    if (!session) {
+  const checkAuth = async () => {
+    const localSession = customAuth.getSession();
+    if (!localSession) {
+      navigate("/login");
+      return;
+    }
+
+    // Validate session server-side to prevent localStorage manipulation
+    const { valid, session } = await customAuth.validateSession();
+    
+    if (!valid || !session) {
+      toast({
+        title: "نشست نامعتبر",
+        description: "لطفا دوباره وارد شوید",
+        variant: "destructive",
+      });
       navigate("/login");
       return;
     }
