@@ -11,7 +11,7 @@ import { customAuth } from "@/lib/auth";
 import { chatApi, Conversation, ChatMessage, ChatUser } from "@/lib/chat-api";
 import { 
   MessageSquare, Send, Plus, Users, User, Search, 
-  Paperclip, X, FileText, Image, ArrowLeft, UserPlus 
+  Paperclip, X, FileText, ArrowLeft, UserPlus, Settings, Crown, Edit2
 } from "lucide-react";
 
 interface ChatPanelProps {
@@ -28,7 +28,9 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
   const [isSearching, setIsSearching] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [groupName, setGroupName] = useState("");
+  const [editGroupName, setEditGroupName] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<ChatUser[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -40,9 +42,14 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
     const { data, error } = await chatApi.getConversations();
     if (!error && data) {
       setConversations(data);
+      // Update selected conversation if it exists
+      if (selectedConversation) {
+        const updated = data.find(c => c.id === selectedConversation.id);
+        if (updated) setSelectedConversation(updated);
+      }
     }
     setLoading(false);
-  }, []);
+  }, [selectedConversation]);
 
   const loadMessages = useCallback(async (conversationId: string) => {
     const { data, error } = await chatApi.getMessages(conversationId);
@@ -54,13 +61,13 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
 
   useEffect(() => {
     loadConversations();
-  }, [loadConversations]);
+  }, []);
 
   useEffect(() => {
     if (selectedConversation) {
       loadMessages(selectedConversation.id);
     }
-  }, [selectedConversation, loadMessages]);
+  }, [selectedConversation?.id, loadMessages]);
 
   // Real-time message subscription
   useEffect(() => {
@@ -77,7 +84,6 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
           filter: `conversation_id=eq.${selectedConversation.id}`,
         },
         async (payload) => {
-          // Fetch the full message with sender info
           const newMsg = payload.new as ChatMessage;
           if (newMsg.sender_id !== currentUserId) {
             loadMessages(selectedConversation.id);
@@ -138,8 +144,9 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
       return;
     }
     if (data) {
-      setConversations(prev => [{ ...data, participants: selectedUsers }, ...prev]);
-      setSelectedConversation({ ...data, participants: selectedUsers });
+      const newConv = { ...data, participants: selectedUsers, admin_ids: [currentUserId] };
+      setConversations(prev => [newConv, ...prev]);
+      setSelectedConversation(newConv);
       setShowNewGroup(false);
       setGroupName("");
       setSelectedUsers([]);
@@ -169,8 +176,6 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
       }]);
       setNewMessage("");
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-      
-      // Update conversation list
       loadConversations();
     }
   };
@@ -227,6 +232,53 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
     }
   };
 
+  const handleRenameGroup = async () => {
+    if (!selectedConversation || !editGroupName.trim()) return;
+    const { error } = await chatApi.renameGroup(selectedConversation.id, editGroupName);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "موفق", description: "نام گروه تغییر کرد" });
+    setSelectedConversation({ ...selectedConversation, name: editGroupName });
+    loadConversations();
+  };
+
+  const handleMakeAdmin = async (userId: string) => {
+    if (!selectedConversation) return;
+    const { error } = await chatApi.makeAdmin(selectedConversation.id, userId);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "موفق", description: "کاربر ادمین شد" });
+    loadConversations();
+  };
+
+  const handleRemoveAdmin = async (userId: string) => {
+    if (!selectedConversation) return;
+    const { error } = await chatApi.removeAdmin(selectedConversation.id, userId);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "موفق", description: "دسترسی ادمین برداشته شد" });
+    loadConversations();
+  };
+
+  const handleAddParticipant = async (user: ChatUser) => {
+    if (!selectedConversation) return;
+    const { error } = await chatApi.addParticipants(selectedConversation.id, [user.id]);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "موفق", description: "کاربر اضافه شد" });
+    loadConversations();
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
   const getConversationName = (conv: Conversation) => {
     if (conv.is_group) return conv.name || "گروه";
     const other = conv.participants?.find(p => p.id !== currentUserId);
@@ -243,6 +295,12 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
     if (!fileName) return false;
     return /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
   };
+
+  const isUserAdmin = (conv: Conversation, userId: string) => {
+    return conv.admin_ids?.includes(userId) || conv.created_by === userId;
+  };
+
+  const currentUserIsAdmin = selectedConversation ? isUserAdmin(selectedConversation, currentUserId) : false;
 
   if (loading) {
     return (
@@ -431,47 +489,116 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                 )}
               </div>
               {selectedConversation.is_group && (
-                <Dialog>
+                <Dialog open={showGroupSettings} onOpenChange={(open) => {
+                  setShowGroupSettings(open);
+                  if (open) {
+                    setEditGroupName(selectedConversation.name || "");
+                    setSearchQuery("");
+                    setSearchResults([]);
+                  }
+                }}>
                   <DialogTrigger asChild>
                     <Button variant="ghost" size="icon">
-                      <UserPlus className="w-4 h-4" />
+                      <Settings className="w-4 h-4" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent dir="rtl">
+                  <DialogContent dir="rtl" className="max-w-md">
                     <DialogHeader>
-                      <DialogTitle>اضافه کردن عضو</DialogTitle>
-                      <DialogDescription>کاربر جدید را جستجو و اضافه کنید</DialogDescription>
+                      <DialogTitle>تنظیمات گروه</DialogTitle>
+                      <DialogDescription>مدیریت گروه و اعضا</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
-                      <div className="relative">
-                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="جستجوی کاربر..."
-                          value={searchQuery}
-                          onChange={(e) => handleSearch(e.target.value)}
-                          className="text-right pr-10"
-                        />
-                      </div>
-                      <div className="space-y-2 max-h-60 overflow-auto">
-                        {searchResults.filter(u => !selectedConversation.participants?.find(p => p.id === u.id)).map(user => (
-                          <button
-                            key={user.id}
-                            onClick={async () => {
-                              const { error } = await chatApi.addParticipants(selectedConversation.id, [user.id]);
-                              if (!error) {
-                                toast({ title: "موفق", description: "کاربر اضافه شد" });
-                                loadConversations();
-                              }
-                            }}
-                            className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-right"
-                          >
-                            <Avatar className="w-10 h-10">
-                              <AvatarImage src={user.profile_picture || undefined} />
-                              <AvatarFallback><User className="w-5 h-5" /></AvatarFallback>
-                            </Avatar>
-                            <span>{user.full_name || user.username}</span>
-                          </button>
-                        ))}
+                      {/* Rename Group - Only for admins */}
+                      {currentUserIsAdmin && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">تغییر نام گروه</label>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="نام جدید گروه"
+                              value={editGroupName}
+                              onChange={(e) => setEditGroupName(e.target.value)}
+                              className="text-right flex-1"
+                            />
+                            <Button size="icon" onClick={handleRenameGroup} disabled={!editGroupName.trim()}>
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add Members - Only for admins */}
+                      {currentUserIsAdmin && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">اضافه کردن عضو</label>
+                          <div className="relative">
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              placeholder="جستجوی کاربر..."
+                              value={searchQuery}
+                              onChange={(e) => handleSearch(e.target.value)}
+                              className="text-right pr-10"
+                            />
+                          </div>
+                          {searchResults.length > 0 && (
+                            <div className="border rounded-lg max-h-32 overflow-auto">
+                              {searchResults
+                                .filter(u => !selectedConversation.participants?.find(p => p.id === u.id))
+                                .map(user => (
+                                  <button
+                                    key={user.id}
+                                    onClick={() => handleAddParticipant(user)}
+                                    className="w-full flex items-center gap-3 p-2 hover:bg-muted transition-colors text-right"
+                                  >
+                                    <Avatar className="w-8 h-8">
+                                      <AvatarImage src={user.profile_picture || undefined} />
+                                      <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
+                                    </Avatar>
+                                    <span>{user.full_name || user.username}</span>
+                                    <UserPlus className="w-4 h-4 mr-auto text-muted-foreground" />
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Members List */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">اعضای گروه</label>
+                        <div className="border rounded-lg max-h-48 overflow-auto">
+                          {selectedConversation.participants?.map(user => {
+                            const userIsAdmin = isUserAdmin(selectedConversation, user.id);
+                            const isCreator = selectedConversation.created_by === user.id;
+                            return (
+                              <div
+                                key={user.id}
+                                className="flex items-center gap-3 p-2 border-b last:border-b-0"
+                              >
+                                <Avatar className="w-8 h-8">
+                                  <AvatarImage src={user.profile_picture || undefined} />
+                                  <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
+                                </Avatar>
+                                <span className="flex-1">{user.full_name || user.username}</span>
+                                {userIsAdmin && (
+                                  <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded flex items-center gap-1">
+                                    <Crown className="w-3 h-3" />
+                                    {isCreator ? "سازنده" : "ادمین"}
+                                  </span>
+                                )}
+                                {currentUserIsAdmin && user.id !== currentUserId && !isCreator && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => userIsAdmin ? handleRemoveAdmin(user.id) : handleMakeAdmin(user.id)}
+                                    className="text-xs"
+                                  >
+                                    {userIsAdmin ? "برداشتن ادمین" : "ادمین کردن"}
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </DialogContent>

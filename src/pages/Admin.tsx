@@ -80,7 +80,7 @@ const Admin = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
-  const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1" });
+  const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1", role: "student" as "student" | "admin" });
   const [newClass, setNewClass] = useState({ grade: "7/1", title: "", link: "" });
   const [newJozveh, setNewJozveh] = useState({ grade: "7/1", subject: "olom", title: "" });
   const [jozvehFile, setJozvehFile] = useState<File | null>(null);
@@ -202,7 +202,7 @@ const Admin = () => {
     }
   };
 
-  const createStudent = async (e: React.FormEvent) => {
+  const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
@@ -211,7 +211,7 @@ const Admin = () => {
         newStudent.username,
         newStudent.password,
         newStudent.name,
-        "student"
+        newStudent.role
       );
 
       if (authError) {
@@ -225,32 +225,37 @@ const Admin = () => {
       }
 
       if (userId) {
-        const { error: studentError } = await secureApi.insert('students', {
-          user_id: userId,
-          full_name: newStudent.name,
-          grade: newStudent.grade,
-        });
-
-        if (studentError) {
-          toast({
-            title: "خطا",
-            description: studentError,
-            variant: "destructive",
+        // Only create student record if role is student
+        if (newStudent.role === "student") {
+          const { error: studentError } = await secureApi.insert('students', {
+            user_id: userId,
+            full_name: newStudent.name,
+            grade: newStudent.grade,
           });
-          setLoading(false);
-          return;
+
+          if (studentError) {
+            toast({
+              title: "خطا",
+              description: studentError,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
         }
 
         toast({
           title: "موفقیت‌آمیز",
-          description: "دانش‌آموز با موفقیت ایجاد شد",
+          description: newStudent.role === "admin" ? "ادمین با موفقیت ایجاد شد" : "دانش‌آموز با موفقیت ایجاد شد",
         });
 
-        setNewStudent({ name: "", username: "", password: "", grade: "7/1" });
-        fetchStudents();
+        setNewStudent({ name: "", username: "", password: "", grade: "7/1", role: "student" });
+        if (newStudent.role === "student") {
+          fetchStudents();
+        }
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "ایجاد دانش‌آموز با مشکل مواجه شد";
+      const errorMessage = error instanceof Error ? error.message : "ایجاد کاربر با مشکل مواجه شد";
       toast({
         title: "خطا",
         description: errorMessage,
@@ -511,9 +516,18 @@ const Admin = () => {
               <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300 hover:shadow-lg">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <UserPlus className="w-5 h-5" />
-                  افزودن دانش‌آموز جدید
+                  افزودن کاربر جدید
                 </h3>
-                <form onSubmit={createStudent} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <form onSubmit={createUser} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Select value={newStudent.role} onValueChange={(value: "student" | "admin") => setNewStudent({ ...newStudent, role: value })}>
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="نوع کاربر" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="student">دانش‌آموز</SelectItem>
+                      <SelectItem value="admin">ادمین</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Input
                     placeholder="نام و نام خانوادگی"
                     value={newStudent.name}
@@ -536,18 +550,20 @@ const Admin = () => {
                     required
                     className="text-right transition-all duration-200 focus:scale-[1.01]"
                   />
-                  <Select value={newStudent.grade} onValueChange={(value) => setNewStudent({ ...newStudent, grade: value })}>
-                    <SelectTrigger className="text-right">
-                      <SelectValue placeholder="پایه تحصیلی" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GRADE_OPTIONS.map(g => (
-                        <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button type="submit" disabled={loading} className="sm:col-span-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
-                    {loading ? "در حال ایجاد..." : "ایجاد دانش‌آموز"}
+                  {newStudent.role === "student" && (
+                    <Select value={newStudent.grade} onValueChange={(value) => setNewStudent({ ...newStudent, grade: value })}>
+                      <SelectTrigger className="text-right">
+                        <SelectValue placeholder="پایه تحصیلی" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GRADE_OPTIONS.map(g => (
+                          <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button type="submit" disabled={loading} className={`transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${newStudent.role === "student" ? "" : "lg:col-span-2"}`}>
+                    {loading ? "در حال ایجاد..." : newStudent.role === "admin" ? "ایجاد ادمین" : "ایجاد دانش‌آموز"}
                   </Button>
                 </form>
               </Card>
