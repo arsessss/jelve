@@ -55,6 +55,26 @@ serve(async (req) => {
 
     const userId = session.user_id;
 
+    // Helper to check if user is group admin
+    const isGroupAdmin = async (conversationId: string, checkUserId: string): Promise<boolean> => {
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('created_by')
+        .eq('id', conversationId)
+        .single();
+      
+      if (conv?.created_by === checkUserId) return true;
+
+      const { data: admin } = await supabase
+        .from('group_admins')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .eq('user_id', checkUserId)
+        .single();
+      
+      return !!admin;
+    };
+
     switch (action) {
       case 'get_conversations': {
         // Get all conversations where user is a participant
@@ -98,6 +118,18 @@ serve(async (req) => {
               .select('id, username, full_name, profile_picture')
               .in('id', userIds);
 
+            // Get group admins
+            const { data: admins } = await supabase
+              .from('group_admins')
+              .select('user_id')
+              .eq('conversation_id', conv.id);
+
+            const adminIds = admins?.map(a => a.user_id) || [];
+            // Creator is always admin
+            if (!adminIds.includes(conv.created_by)) {
+              adminIds.push(conv.created_by);
+            }
+
             // Get last message
             const { data: lastMsg } = await supabase
               .from('messages')
@@ -110,6 +142,7 @@ serve(async (req) => {
             return {
               ...conv,
               participants: users || [],
+              admin_ids: adminIds,
               last_message: lastMsg,
             };
           })
@@ -343,10 +376,10 @@ serve(async (req) => {
           );
         }
 
-        // Verify user is participant and it's a group
+        // Verify it's a group
         const { data: conv } = await supabase
           .from('conversations')
-          .select('is_group, created_by')
+          .select('is_group')
           .eq('id', conversationId)
           .single();
 
@@ -354,6 +387,15 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({ error: 'Can only add participants to groups' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verify user is group admin
+        const isAdmin = await isGroupAdmin(conversationId, userId);
+        if (!isAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'Only group admins can add participants' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
@@ -367,6 +409,129 @@ serve(async (req) => {
           );
 
         if (error) throw error;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'rename_group': {
+        const conversationId = data?.conversation_id as string;
+        const newName = data?.name as string;
+
+        if (!conversationId || !newName) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID and name required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verify user is group admin
+        const isAdmin = await isGroupAdmin(conversationId, userId);
+        if (!isAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'Only group admins can rename the group' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { error } = await supabase
+          .from('conversations')
+          .update({ name: newName })
+          .eq('id', conversationId);
+
+        if (error) throw error;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'make_admin': {
+        const conversationId = data?.conversation_id as string;
+        const targetUserId = data?.user_id as string;
+
+        if (!conversationId || !targetUserId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID and user ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verify user is group admin
+        const isAdmin = await isGroupAdmin(conversationId, userId);
+        if (!isAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'Only group admins can make others admin' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if target is already admin
+        const targetIsAdmin = await isGroupAdmin(conversationId, targetUserId);
+        if (targetIsAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'User is already an admin' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { error } = await supabase
+          .from('group_admins')
+          .insert({
+            conversation_id: conversationId,
+            user_id: targetUserId,
+          });
+
+        if (error) throw error;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'remove_admin': {
+        const conversationId = data?.conversation_id as string;
+        const targetUserId = data?.user_id as string;
+
+        if (!conversationId || !targetUserId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID and user ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verify user is group admin
+        const isAdmin = await isGroupAdmin(conversationId, userId);
+        if (!isAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'Only group admins can remove admin status' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Cannot remove creator's admin status
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('created_by')
+          .eq('id', conversationId)
+          .single();
+
+        if (conv?.created_by === targetUserId) {
+          return new Response(
+            JSON.stringify({ error: 'Cannot remove admin status from group creator' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await supabase
+          .from('group_admins')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('user_id', targetUserId);
 
         return new Response(
           JSON.stringify({ success: true }),

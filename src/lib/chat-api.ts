@@ -64,6 +64,7 @@ export interface Conversation {
   created_at: string;
   updated_at: string;
   participants?: ChatUser[];
+  admin_ids?: string[];
   last_message?: {
     content: string | null;
     created_at: string;
@@ -99,5 +100,23 @@ export const chatApi = {
     chatApiCall<{ success: boolean }>('add_participants', { 
       conversation_id: conversationId, 
       participant_ids: participantIds,
+    }),
+  
+  renameGroup: (conversationId: string, name: string) =>
+    chatApiCall<{ success: boolean }>('rename_group', { 
+      conversation_id: conversationId, 
+      name,
+    }),
+  
+  makeAdmin: (conversationId: string, userId: string) =>
+    chatApiCall<{ success: boolean }>('make_admin', { 
+      conversation_id: conversationId, 
+      user_id: userId,
+    }),
+  
+  removeAdmin: (conversationId: string, userId: string) =>
+    chatApiCall<{ success: boolean }>('remove_admin', { 
+      conversation_id: conversationId, 
+      user_id: userId,
     }),
 };
