@@ -75,9 +75,17 @@ serve(async (req) => {
       return !!admin;
     };
 
+    // Helper to get participant count
+    const getParticipantCount = async (conversationId: string): Promise<number> => {
+      const { count } = await supabase
+        .from('conversation_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId);
+      return count || 0;
+    };
+
     switch (action) {
       case 'get_conversations': {
-        // Get all conversations where user is a participant
         const { data: participants, error } = await supabase
           .from('conversation_participants')
           .select('conversation_id')
@@ -94,7 +102,6 @@ serve(async (req) => {
           );
         }
 
-        // Get conversation details with participants
         const { data: conversations, error: convError } = await supabase
           .from('conversations')
           .select('*')
@@ -103,7 +110,6 @@ serve(async (req) => {
 
         if (convError) throw convError;
 
-        // Get participants for each conversation
         const enrichedConversations = await Promise.all(
           (conversations || []).map(async (conv) => {
             const { data: parts } = await supabase
@@ -118,19 +124,16 @@ serve(async (req) => {
               .select('id, username, full_name, profile_picture')
               .in('id', userIds);
 
-            // Get group admins
             const { data: admins } = await supabase
               .from('group_admins')
               .select('user_id')
               .eq('conversation_id', conv.id);
 
             const adminIds = admins?.map(a => a.user_id) || [];
-            // Creator is always admin
             if (!adminIds.includes(conv.created_by)) {
               adminIds.push(conv.created_by);
             }
 
-            // Get last message
             const { data: lastMsg } = await supabase
               .from('messages')
               .select('content, created_at, sender_id')
@@ -163,7 +166,6 @@ serve(async (req) => {
           );
         }
 
-        // Verify user is participant
         const { data: participant } = await supabase
           .from('conversation_participants')
           .select('id')
@@ -186,7 +188,6 @@ serve(async (req) => {
 
         if (error) throw error;
 
-        // Get sender info for each message
         const senderIds = [...new Set(messages?.map(m => m.sender_id) || [])];
         const { data: senders } = await supabase
           .from('custom_users')
@@ -219,7 +220,6 @@ serve(async (req) => {
           );
         }
 
-        // Verify user is participant
         const { data: participant } = await supabase
           .from('conversation_participants')
           .select('id')
@@ -248,7 +248,6 @@ serve(async (req) => {
 
         if (error) throw error;
 
-        // Update conversation updated_at
         await supabase
           .from('conversations')
           .update({ updated_at: new Date().toISOString() })
@@ -272,11 +271,9 @@ serve(async (req) => {
           );
         }
 
-        // For direct messages, check if conversation already exists
         if (!isGroup && participantIds.length === 1) {
           const otherId = participantIds[0];
           
-          // Find existing DM
           const { data: myConvs } = await supabase
             .from('conversation_participants')
             .select('conversation_id')
@@ -291,7 +288,6 @@ serve(async (req) => {
           const sharedConvIds = theirConvs?.filter(c => myIds.has(c.conversation_id)).map(c => c.conversation_id) || [];
 
           if (sharedConvIds.length > 0) {
-            // Check if any of these are DMs (not groups)
             const { data: existingDm } = await supabase
               .from('conversations')
               .select('*')
@@ -309,7 +305,6 @@ serve(async (req) => {
           }
         }
 
-        // Create new conversation
         const { data: conversation, error: convError } = await supabase
           .from('conversations')
           .insert({
@@ -322,7 +317,6 @@ serve(async (req) => {
 
         if (convError) throw convError;
 
-        // Add participants (including creator)
         const allParticipants = [...new Set([userId, ...participantIds])];
         const { error: partError } = await supabase
           .from('conversation_participants')
@@ -365,6 +359,192 @@ serve(async (req) => {
         );
       }
 
+      case 'delete_message': {
+        const messageId = data?.message_id as string;
+        const conversationId = data?.conversation_id as string;
+
+        if (!messageId || !conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Message ID and conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get message
+        const { data: message } = await supabase
+          .from('messages')
+          .select('sender_id')
+          .eq('id', messageId)
+          .single();
+
+        if (!message) {
+          return new Response(
+            JSON.stringify({ error: 'Message not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Users can delete their own messages, admins can delete any
+        const isAdmin = await isGroupAdmin(conversationId, userId);
+        if (message.sender_id !== userId && !isAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'Not authorized to delete this message' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await supabase.from('messages').delete().eq('id', messageId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'delete_conversation': {
+        const conversationId = data?.conversation_id as string;
+
+        if (!conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verify user is participant
+        const { data: participant } = await supabase
+          .from('conversation_participants')
+          .select('id')
+          .eq('conversation_id', conversationId)
+          .eq('user_id', userId)
+          .single();
+
+        if (!participant) {
+          return new Response(
+            JSON.stringify({ error: 'Not a participant' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Delete all messages, participants, admins, then conversation
+        await supabase.from('messages').delete().eq('conversation_id', conversationId);
+        await supabase.from('group_admins').delete().eq('conversation_id', conversationId);
+        await supabase.from('conversation_participants').delete().eq('conversation_id', conversationId);
+        await supabase.from('conversations').delete().eq('id', conversationId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'leave_group': {
+        const conversationId = data?.conversation_id as string;
+
+        if (!conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('created_by, is_group')
+          .eq('id', conversationId)
+          .single();
+
+        if (!conv) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const participantCount = await getParticipantCount(conversationId);
+
+        // If only 1 member, delete the group
+        if (participantCount <= 1) {
+          await supabase.from('messages').delete().eq('conversation_id', conversationId);
+          await supabase.from('group_admins').delete().eq('conversation_id', conversationId);
+          await supabase.from('conversation_participants').delete().eq('conversation_id', conversationId);
+          await supabase.from('conversations').delete().eq('id', conversationId);
+
+          return new Response(
+            JSON.stringify({ success: true, deleted: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // If owner is leaving, transfer ownership
+        if (conv.created_by === userId) {
+          // Get random remaining member
+          const { data: remainingMembers } = await supabase
+            .from('conversation_participants')
+            .select('user_id')
+            .eq('conversation_id', conversationId)
+            .neq('user_id', userId)
+            .limit(1);
+
+          if (remainingMembers && remainingMembers.length > 0) {
+            const newOwnerId = remainingMembers[0].user_id;
+            await supabase
+              .from('conversations')
+              .update({ created_by: newOwnerId })
+              .eq('id', conversationId);
+          }
+        }
+
+        // Remove user from participants and admins
+        await supabase
+          .from('conversation_participants')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('user_id', userId);
+
+        await supabase
+          .from('group_admins')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('user_id', userId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'update_group_picture': {
+        const conversationId = data?.conversation_id as string;
+        const pictureUrl = data?.picture_url as string;
+
+        if (!conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verify user is group admin
+        const isAdmin = await isGroupAdmin(conversationId, userId);
+        if (!isAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'Only group admins can update group picture' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await supabase
+          .from('conversations')
+          .update({ group_picture: pictureUrl || null })
+          .eq('id', conversationId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'add_participants': {
         const conversationId = data?.conversation_id as string;
         const newParticipantIds = data?.participant_ids as string[];
@@ -376,7 +556,6 @@ serve(async (req) => {
           );
         }
 
-        // Verify it's a group
         const { data: conv } = await supabase
           .from('conversations')
           .select('is_group')
@@ -390,7 +569,6 @@ serve(async (req) => {
           );
         }
 
-        // Verify user is group admin
         const isAdmin = await isGroupAdmin(conversationId, userId);
         if (!isAdmin) {
           return new Response(
@@ -427,7 +605,6 @@ serve(async (req) => {
           );
         }
 
-        // Verify user is group admin
         const isAdmin = await isGroupAdmin(conversationId, userId);
         if (!isAdmin) {
           return new Response(
@@ -460,7 +637,6 @@ serve(async (req) => {
           );
         }
 
-        // Verify user is group admin
         const isAdmin = await isGroupAdmin(conversationId, userId);
         if (!isAdmin) {
           return new Response(
@@ -469,7 +645,6 @@ serve(async (req) => {
           );
         }
 
-        // Check if target is already admin
         const targetIsAdmin = await isGroupAdmin(conversationId, targetUserId);
         if (targetIsAdmin) {
           return new Response(
@@ -504,7 +679,6 @@ serve(async (req) => {
           );
         }
 
-        // Verify user is group admin
         const isAdmin = await isGroupAdmin(conversationId, userId);
         if (!isAdmin) {
           return new Response(
@@ -513,7 +687,6 @@ serve(async (req) => {
           );
         }
 
-        // Cannot remove creator's admin status
         const { data: conv } = await supabase
           .from('conversations')
           .select('created_by')

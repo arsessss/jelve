@@ -5,6 +5,7 @@ interface ChatApiResponse<T = unknown> {
   data?: T;
   error?: string;
   existing?: boolean;
+  deleted?: boolean;
 }
 
 async function chatApiCall<T = unknown>(action: string, data?: Record<string, unknown>): Promise<ChatApiResponse<T>> {
@@ -31,7 +32,7 @@ async function chatApiCall<T = unknown>(action: string, data?: Record<string, un
       return { error: result.error };
     }
 
-    return { data: result.data as T, existing: result.existing };
+    return { data: result.data as T, existing: result.existing, deleted: result.deleted };
   } catch (err) {
     console.error('Chat API error:', err);
     return { error: 'Network error' };
@@ -63,6 +64,7 @@ export interface Conversation {
   created_by: string;
   created_at: string;
   updated_at: string;
+  group_picture?: string | null;
   participants?: ChatUser[];
   admin_ids?: string[];
   last_message?: {
@@ -95,6 +97,28 @@ export const chatApi = {
   
   searchUsers: (query: string) =>
     chatApiCall<ChatUser[]>('search_users', { query }),
+  
+  deleteMessage: (conversationId: string, messageId: string) =>
+    chatApiCall<{ success: boolean }>('delete_message', { 
+      conversation_id: conversationId,
+      message_id: messageId,
+    }),
+  
+  deleteConversation: (conversationId: string) =>
+    chatApiCall<{ success: boolean }>('delete_conversation', { 
+      conversation_id: conversationId,
+    }),
+  
+  leaveGroup: (conversationId: string) =>
+    chatApiCall<{ success: boolean; deleted?: boolean }>('leave_group', { 
+      conversation_id: conversationId,
+    }),
+  
+  updateGroupPicture: (conversationId: string, pictureUrl: string | null) =>
+    chatApiCall<{ success: boolean }>('update_group_picture', { 
+      conversation_id: conversationId, 
+      picture_url: pictureUrl,
+    }),
   
   addParticipants: (conversationId: string, participantIds: string[]) =>
     chatApiCall<{ success: boolean }>('add_participants', { 
