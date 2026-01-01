@@ -1,5 +1,5 @@
 import { RoleBasedHeader } from "@/components/RoleBasedHeader";
-import { MapSection } from "@/components/MapSection";
+import { ContactSection } from "@/components/ContactSection";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
+import { Send } from "lucide-react";
 
 const contactSchema = z.object({
   name: z.string().trim().min(2, "نام باید حداقل ۲ حرف باشد").max(100, "نام نباید بیش از ۱۰۰ حرف باشد"),
@@ -27,7 +28,6 @@ const Contact = () => {
     setLoading(true);
 
     try {
-      // Validate inputs
       const validatedData = contactSchema.parse({
         name,
         phone,
@@ -75,8 +75,13 @@ const Contact = () => {
         <section className="py-12 px-4">
           <div className="container mx-auto">
             <h1 
-              className="text-4xl md:text-5xl font-bold text-center mb-4 animate-fade-in bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent"
+              className="text-4xl md:text-5xl font-bold text-center mb-4 animate-fade-in"
               dir="rtl"
+              style={{
+                backgroundImage: 'linear-gradient(135deg, hsl(var(--foreground)), hsl(var(--muted-foreground)))',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
             >
               ارتباط با ما
             </h1>
@@ -84,63 +89,74 @@ const Contact = () => {
               پیام خود را برای ما ارسال کنید
             </p>
 
-            <Card className="max-w-2xl mx-auto p-8 animate-scale-in">
+            <Card className="max-w-2xl mx-auto p-8 animate-scale-in transition-all duration-500 hover:shadow-lg">
               <form onSubmit={handleSubmit} className="space-y-6" dir="rtl">
-                <div>
+                <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
                   <label className="block text-sm font-medium mb-2">نام و نام خانوادگی</label>
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
-                    className="text-right"
+                    className="text-right transition-all duration-200 focus:scale-[1.01]"
                     placeholder="نام خود را وارد کنید"
                   />
                 </div>
 
-                <div>
+                <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
                   <label className="block text-sm font-medium mb-2">شماره تماس</label>
                   <Input
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     required
                     type="tel"
-                    className="text-right"
+                    className="text-left transition-all duration-200 focus:scale-[1.01]"
                     placeholder="09123456789"
                     dir="ltr"
                   />
                 </div>
 
-                <div>
+                <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
                   <label className="block text-sm font-medium mb-2">پیام</label>
                   <Textarea
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     required
                     rows={6}
-                    className="text-right resize-none"
+                    className="text-right resize-none transition-all duration-200 focus:scale-[1.01]"
                     placeholder="پیام خود را بنویسید..."
                   />
                 </div>
 
                 <Button 
                   type="submit" 
-                  className="w-full gradient-primary text-white font-bold"
+                  className="w-full gradient-primary text-primary-foreground font-bold gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] animate-fade-in"
+                  style={{ animationDelay: '400ms' }}
                   disabled={loading}
                 >
-                  {loading ? "در حال ارسال..." : "ارسال پیام"}
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                      <span>در حال ارسال...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      ارسال پیام
+                    </>
+                  )}
                 </Button>
               </form>
             </Card>
           </div>
         </section>
 
-        <MapSection />
+        <ContactSection />
       </main>
 
       <footer className="bg-card border-t border-border py-8">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-muted-foreground" dir="rtl">
-            © ۱۴۰۳ مجتمع آموزشی جلوه. تمامی حقوق محفوظ است.
+          <p className="text-muted-foreground animate-fade-in" dir="rtl">
+            © ۱۴۰۴ مجتمع آموزشی جلوه. تمامی حقوق محفوظ است.
           </p>
         </div>
       </footer>
