@@ -11,12 +11,10 @@ export const RoleBasedHeader = () => {
 
   useEffect(() => {
     const currentSession = customAuth.getSession();
-    console.log("RoleBasedHeader session:", currentSession);
     setSession(currentSession);
 
     const handleAuthChange = () => {
       const newSession = customAuth.getSession();
-      console.log("Auth changed, new session:", newSession);
       setSession(newSession);
     };
 
@@ -30,27 +28,27 @@ export const RoleBasedHeader = () => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-b border-border shadow-sm">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-b border-border animate-slide-down">
       <nav className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center group">
             <img 
               src={logo} 
               alt="Jelve Logo" 
-              className="h-14 w-14 object-contain transition-all duration-300 group-hover:scale-105"
+              className="h-14 w-14 object-contain transition-all duration-500 group-hover:scale-110 group-hover:rotate-3"
             />
           </Link>
 
-          <div className="flex items-center gap-6" dir="rtl">
+          <div className="flex items-center gap-4 sm:gap-6" dir="rtl">
             <Link 
               to="/" 
-              className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+              className="nav-link text-foreground/80 hover:text-foreground font-medium py-1 touch-target flex items-center"
             >
               صفحه اصلی
             </Link>
             <Link 
               to="/contact" 
-              className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+              className="nav-link text-foreground/80 hover:text-foreground font-medium py-1 touch-target flex items-center"
             >
               ارتباط با ما
             </Link>
@@ -58,7 +56,7 @@ export const RoleBasedHeader = () => {
             {session?.role === "admin" && (
               <Link 
                 to="/admin" 
-                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+                className="nav-link text-foreground/80 hover:text-foreground font-medium py-1 touch-target flex items-center"
               >
                 پنل
               </Link>
@@ -67,7 +65,7 @@ export const RoleBasedHeader = () => {
             {session?.role === "student" && (
               <Link 
                 to="/student" 
-                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+                className="nav-link text-foreground/80 hover:text-foreground font-medium py-1 touch-target flex items-center"
               >
                 دانش‌آموز
               </Link>
@@ -76,7 +74,7 @@ export const RoleBasedHeader = () => {
             {!session && (
               <Link 
                 to="/login" 
-                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-foreground after:transition-all after:duration-300 hover:after:w-full"
+                className="nav-link text-foreground/80 hover:text-foreground font-medium py-1 touch-target flex items-center"
               >
                 ورود
               </Link>
@@ -85,7 +83,7 @@ export const RoleBasedHeader = () => {
             {session && !session.role && (
               <button 
                 onClick={handleLogout}
-                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium flex items-center gap-1"
+                className="text-foreground/80 hover:text-foreground transition-all duration-300 font-medium flex items-center gap-1 hover:scale-105 active:scale-95 touch-target"
               >
                 <LogOut className="w-4 h-4" />
                 خروج
