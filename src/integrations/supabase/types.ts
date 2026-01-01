@@ -98,6 +98,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          group_picture: string | null
           id: string
           is_group: boolean
           name: string | null
@@ -106,6 +107,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by: string
+          group_picture?: string | null
           id?: string
           is_group?: boolean
           name?: string | null
@@ -114,6 +116,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string
+          group_picture?: string | null
           id?: string
           is_group?: boolean
           name?: string | null
@@ -145,6 +148,30 @@ export type Database = {
           password_hash?: string
           profile_picture?: string | null
           username?: string
+        }
+        Relationships: []
+      }
+      grade_periods: {
+        Row: {
+          created_at: string
+          grade: string
+          id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          grade: string
+          id?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          grade?: string
+          id?: string
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -295,6 +322,51 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "student_grades_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_period_grades: {
+        Row: {
+          created_at: string
+          grade: string | null
+          id: string
+          period_id: string
+          student_id: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          grade?: string | null
+          id?: string
+          period_id: string
+          student_id: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          grade?: string | null
+          id?: string
+          period_id?: string
+          student_id?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_period_grades_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "grade_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_period_grades_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
