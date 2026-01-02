@@ -7,12 +7,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting using in-memory store
+const signupAttempts = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+function getClientIP(req: Request): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+         req.headers.get('x-real-ip') || 
+         'unknown';
+}
+
+function checkRateLimit(identifier: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = signupAttempts.get(identifier);
+  
+  if (!record || now > record.resetAt) {
+    signupAttempts.set(identifier, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX) {
+    return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
+  }
+  
+  record.count++;
+  return { allowed: true };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Rate limit by IP to prevent mass account creation
+    const clientIP = getClientIP(req);
+    const rateCheck = checkRateLimit(clientIP);
+    if (!rateCheck.allowed) {
+      console.log('Signup rate limit exceeded for IP:', clientIP);
+      return new Response(
+        JSON.stringify({ error: `تعداد درخواست‌ها بیش از حد مجاز است. لطفاً بعداً تلاش کنید` }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateCheck.retryAfter) } }
+      );
+    }
+
     const { username, password, fullName, role } = await req.json();
 
     if (!username || !password || !fullName || !role) {

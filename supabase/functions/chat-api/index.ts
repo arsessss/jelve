@@ -12,6 +12,28 @@ interface RequestBody {
   data?: Record<string, unknown>;
 }
 
+// Rate limiting using in-memory store
+const chatAttempts = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 60;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute - 60 requests per minute
+
+function checkRateLimit(token: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = chatAttempts.get(token);
+  
+  if (!record || now > record.resetAt) {
+    chatAttempts.set(token, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX) {
+    return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
+  }
+  
+  record.count++;
+  return { allowed: true };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -24,6 +46,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Token is required' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Rate limit by token
+    const rateCheck = checkRateLimit(token);
+    if (!rateCheck.allowed) {
+      console.log('Chat API rate limit exceeded');
+      return new Response(
+        JSON.stringify({ error: 'Too many requests' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateCheck.retryAfter) } }
       );
     }
 
@@ -344,17 +376,42 @@ serve(async (req) => {
           );
         }
 
-        const { data: users, error } = await supabase
+        // Sanitize query to prevent SQL injection - only allow alphanumeric, space, and Persian characters
+        const sanitizedQuery = query
+          .replace(/[%_\\'";\-\-]/g, '') // Remove SQL special chars
+          .substring(0, 50) // Limit length
+          .trim();
+        
+        if (!sanitizedQuery || sanitizedQuery.length < 2) {
+          return new Response(
+            JSON.stringify({ data: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Use separate ilike queries to avoid string interpolation vulnerabilities
+        const { data: usersByUsername, error: error1 } = await supabase
           .from('custom_users')
           .select('id, username, full_name, profile_picture')
           .neq('id', userId)
-          .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+          .ilike('username', `%${sanitizedQuery}%`)
           .limit(10);
 
-        if (error) throw error;
+        const { data: usersByFullName, error: error2 } = await supabase
+          .from('custom_users')
+          .select('id, username, full_name, profile_picture')
+          .neq('id', userId)
+          .ilike('full_name', `%${sanitizedQuery}%`)
+          .limit(10);
+
+        if (error1 || error2) throw error1 || error2;
+
+        // Merge and deduplicate results
+        const allUsers = [...(usersByUsername || []), ...(usersByFullName || [])];
+        const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.id, u])).values()).slice(0, 10);
 
         return new Response(
-          JSON.stringify({ data: users }),
+          JSON.stringify({ data: uniqueUsers }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

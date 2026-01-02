@@ -15,6 +15,28 @@ interface RequestBody {
   id?: string;
 }
 
+// Rate limiting using in-memory store
+const apiAttempts = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 100;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+function checkRateLimit(token: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = apiAttempts.get(token);
+  
+  if (!record || now > record.resetAt) {
+    apiAttempts.set(token, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX) {
+    return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
+  }
+  
+  record.count++;
+  return { allowed: true };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -27,6 +49,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Token is required' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Rate limit by token
+    const rateCheck = checkRateLimit(token);
+    if (!rateCheck.allowed) {
+      console.log('Data API rate limit exceeded for token');
+      return new Response(
+        JSON.stringify({ error: 'Too many requests' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateCheck.retryAfter) } }
       );
     }
 
