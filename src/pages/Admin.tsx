@@ -82,7 +82,6 @@ const GRADE_OPTIONS = [
   { value: "9/4", label: "۹/۴" },
 ];
 
-// Fixed subject list as requested
 const SUBJECT_OPTIONS = [
   { value: "zaban", label: "زبان" },
   { value: "riazi", label: "ریاضی" },
@@ -117,13 +116,11 @@ const Admin = () => {
   const jozvehFileRef = useRef<HTMLInputElement>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   
-  // Grade period management
+  // Student grades management (gear icon per student)
+  const [selectedStudentForGrades, setSelectedStudentForGrades] = useState<Student | null>(null);
+  const [studentPeriodsDialogOpen, setStudentPeriodsDialogOpen] = useState(false);
   const [newPeriodTitle, setNewPeriodTitle] = useState("");
-  const [selectedPeriodGrade, setSelectedPeriodGrade] = useState("7/1");
-  const [editingPeriod, setEditingPeriod] = useState<GradePeriod | null>(null);
-  const [periodGrades, setPeriodGrades] = useState<Record<string, Record<string, string>>>({});
   const [gradeDialogOpen, setGradeDialogOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<GradePeriod | null>(null);
   const [studentGrades, setStudentGrades] = useState<Record<string, string>>({});
   
@@ -187,7 +184,6 @@ const Admin = () => {
   };
 
   const fetchAdminUsers = async () => {
-    // Get all users with admin role
     const { data: roles, error: rolesError } = await secureApi.select<{ user_id: string }>('user_roles', { role: 'admin' });
     if (rolesError || !roles) return;
 
@@ -197,7 +193,6 @@ const Admin = () => {
       return;
     }
 
-    // Get user details
     const { data: users, error } = await secureApi.select<AdminUser>('custom_users');
     if (!error && users) {
       const admins = users.filter(u => userIds.includes(u.id));
@@ -317,7 +312,6 @@ const Admin = () => {
 
     try {
       await secureApi.delete('students', studentId);
-      // Note: user_roles deletion handled by cascade or edge function
       await secureApi.delete('custom_users', userId);
       
       toast({ title: "حذف شد", description: "دانش‌آموز با موفقیت حذف شد" });
@@ -327,9 +321,16 @@ const Admin = () => {
     }
   };
 
-  // Grade Period Management
-  const createGradePeriod = async () => {
-    if (!newPeriodTitle.trim()) {
+  // Open student grades dialog (gear icon click)
+  const openStudentGradesDialog = (student: Student) => {
+    setSelectedStudentForGrades(student);
+    setStudentPeriodsDialogOpen(true);
+    setNewPeriodTitle("");
+  };
+
+  // Create period for specific student's grade
+  const createPeriodForStudent = async () => {
+    if (!newPeriodTitle.trim() || !selectedStudentForGrades) {
       toast({ title: "خطا", description: "عنوان دوره الزامی است", variant: "destructive" });
       return;
     }
@@ -337,7 +338,7 @@ const Admin = () => {
     setLoading(true);
     const { error } = await secureApi.insert('grade_periods', {
       title: newPeriodTitle,
-      grade: selectedPeriodGrade,
+      grade: selectedStudentForGrades.grade,
     });
 
     if (error) {
@@ -353,7 +354,6 @@ const Admin = () => {
   const deleteGradePeriod = async (periodId: string) => {
     if (!confirm("آیا از حذف این دوره و تمام نمرات مرتبط اطمینان دارید؟")) return;
 
-    // First delete all grades for this period
     const { data: grades } = await secureApi.select<StudentPeriodGrade>('student_period_grades', { period_id: periodId });
     if (grades) {
       for (const g of grades) {
@@ -370,16 +370,16 @@ const Admin = () => {
     }
   };
 
-  const openGradeDialog = async (student: Student, period: GradePeriod) => {
-    setSelectedStudent(student);
+  const openGradeDialog = async (period: GradePeriod) => {
+    if (!selectedStudentForGrades) return;
     setSelectedPeriod(period);
     setStudentGrades({});
-    await fetchStudentPeriodGrades(student.id, period.id);
+    await fetchStudentPeriodGrades(selectedStudentForGrades.id, period.id);
     setGradeDialogOpen(true);
   };
 
   const saveStudentPeriodGrades = async () => {
-    if (!selectedStudent || !selectedPeriod) return;
+    if (!selectedStudentForGrades || !selectedPeriod) return;
     setLoading(true);
 
     try {
@@ -387,7 +387,7 @@ const Admin = () => {
         const gradeValue = studentGrades[subject.value] || "";
         
         const { error } = await secureApi.upsert('student_period_grades', {
-          student_id: selectedStudent.id,
+          student_id: selectedStudentForGrades.id,
           period_id: selectedPeriod.id,
           subject: subject.value,
           grade: gradeValue || null,
@@ -509,12 +509,10 @@ const Admin = () => {
     return found ? found.label : subject;
   };
 
-  const getStudentsForGrade = (grade: string) => {
-    return students.filter(s => s.grade === grade);
-  };
-
-  const getPeriodsForGrade = (grade: string) => {
-    return gradePeriods.filter(p => p.grade === grade);
+  // Get periods for a specific student's grade
+  const getPeriodsForStudentGrade = () => {
+    if (!selectedStudentForGrades) return [];
+    return gradePeriods.filter(p => p.grade === selectedStudentForGrades.grade);
   };
 
   return (
@@ -538,34 +536,30 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="users" className="w-full" dir="rtl">
-            <TabsList className="grid w-full grid-cols-6 mb-8 h-auto p-1">
-              <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-300 data-[state=active]:animate-scale-in">
+            <TabsList className="grid w-full grid-cols-5 mb-8 h-auto p-1">
+              <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">کاربران</span>
               </TabsTrigger>
-              <TabsTrigger value="grades" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-300 data-[state=active]:animate-scale-in">
-                <BookOpen className="w-4 h-4" />
-                <span className="hidden sm:inline">نمرات</span>
-              </TabsTrigger>
-              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-300 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
                 <Video className="w-4 h-4" />
                 <span className="hidden sm:inline">کلاس‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="jozveh" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-300 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="jozveh" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
                 <FileText className="w-4 h-4" />
                 <span className="hidden sm:inline">جزوه‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-300 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
                 <MessageSquare className="w-4 h-4" />
                 <span className="hidden sm:inline">پیام‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="chat" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-300 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="chat" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
                 <Send className="w-4 h-4" />
                 <span className="hidden sm:inline">چت</span>
               </TabsTrigger>
             </TabsList>
 
-            {/* Users Tab - Separated Lists */}
+            {/* Users Tab - With Gear Icon for Grades */}
             <TabsContent value="users" className="space-y-6 animate-fade-in">
               {/* Create User Form */}
               <Card className="p-6 border-2 transition-all duration-300 hover:shadow-lg">
@@ -634,7 +628,7 @@ const Admin = () => {
                     <div 
                       key={admin.id} 
                       className="p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      style={{ animationDelay: `${index * 30}ms` }}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center">
@@ -653,7 +647,7 @@ const Admin = () => {
                 </div>
               </Card>
 
-              {/* Students List */}
+              {/* Students List with Gear Icon */}
               <Card className="p-6 border-2 transition-all duration-300">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <GraduationCap className="w-5 h-5" />
@@ -664,7 +658,7 @@ const Admin = () => {
                     <div 
                       key={student.id} 
                       className="p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      style={{ animationDelay: `${index * 30}ms` }}
                     >
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex items-center gap-3">
@@ -676,6 +670,16 @@ const Admin = () => {
                             <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(student.grade)}</p>
                           </div>
                         </div>
+                        {/* Gear icon for grades */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openStudentGradesDialog(student)}
+                          className="transition-all duration-200 hover:scale-110 hover:bg-foreground/10"
+                          title="مدیریت نمرات"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </Button>
                       </div>
                       <Button
                         variant="destructive"
@@ -693,104 +697,6 @@ const Admin = () => {
                   )}
                 </div>
               </Card>
-            </TabsContent>
-
-            {/* Grades Tab - With Custom Periods */}
-            <TabsContent value="grades" className="space-y-6 animate-fade-in">
-              {/* Create Period */}
-              <Card className="p-6 border-2 transition-all duration-300 hover:shadow-lg">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  ایجاد دوره نمره جدید
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Input
-                    placeholder="عنوان دوره (مثال: امتحان دی‌ماه)"
-                    value={newPeriodTitle}
-                    onChange={(e) => setNewPeriodTitle(e.target.value)}
-                    className="text-right transition-all duration-200 focus:scale-[1.01]"
-                  />
-                  <Select value={selectedPeriodGrade} onValueChange={setSelectedPeriodGrade}>
-                    <SelectTrigger className="text-right">
-                      <SelectValue placeholder="پایه تحصیلی" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GRADE_OPTIONS.map(g => (
-                        <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={createGradePeriod} disabled={loading} className="transition-all duration-300 hover:scale-[1.02]">
-                    <Plus className="w-4 h-4 ml-2" />
-                    ایجاد دوره
-                  </Button>
-                </div>
-              </Card>
-
-              {/* Grade Periods by Grade */}
-              {GRADE_OPTIONS.map(gradeOption => {
-                const periodsForGrade = getPeriodsForGrade(gradeOption.value);
-                const studentsForGrade = getStudentsForGrade(gradeOption.value);
-                
-                if (periodsForGrade.length === 0 && studentsForGrade.length === 0) return null;
-                
-                return (
-                  <Card key={gradeOption.value} className="p-6 border-2 transition-all duration-300">
-                    <h3 className="text-xl font-bold mb-4">پایه {gradeOption.label}</h3>
-                    
-                    {periodsForGrade.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-4">هیچ دوره نمره‌ای برای این پایه وجود ندارد</p>
-                    ) : (
-                      <Accordion type="single" collapsible className="space-y-2">
-                        {periodsForGrade.map(period => (
-                          <AccordionItem key={period.id} value={period.id} className="border rounded-lg px-4 transition-all duration-300">
-                            <AccordionTrigger className="hover:no-underline py-4">
-                              <div className="flex items-center justify-between w-full ml-4">
-                                <span className="font-bold">{period.title}</span>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteGradePeriod(period.id);
-                                  }}
-                                  className="gap-1"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                              <div className="space-y-2 pt-2">
-                                {studentsForGrade.map(student => (
-                                  <div 
-                                    key={student.id}
-                                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg transition-all duration-200 hover:bg-muted"
-                                  >
-                                    <span>{student.full_name}</span>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => openGradeDialog(student, period)}
-                                      className="gap-1 transition-all duration-200 hover:scale-105"
-                                    >
-                                      <Edit2 className="w-3 h-3" />
-                                      ویرایش نمرات
-                                    </Button>
-                                  </div>
-                                ))}
-                                {studentsForGrade.length === 0 && (
-                                  <p className="text-muted-foreground text-center py-2">دانش‌آموزی در این پایه وجود ندارد</p>
-                                )}
-                              </div>
-                            </AccordionContent>
-                          </AccordionItem>
-                        ))}
-                      </Accordion>
-                    )}
-                  </Card>
-                );
-              })}
             </TabsContent>
 
             {/* Classes Tab */}
@@ -839,7 +745,7 @@ const Admin = () => {
                     <div 
                       key={cls.id} 
                       className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      style={{ animationDelay: `${index * 30}ms` }}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="font-bold truncate">{cls.title}</p>
@@ -928,7 +834,7 @@ const Admin = () => {
                     <div 
                       key={jozveh.id} 
                       className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      style={{ animationDelay: `${index * 30}ms` }}
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <FileText className="w-8 h-8 text-muted-foreground shrink-0" />
@@ -970,7 +876,7 @@ const Admin = () => {
                       key={msg.id} 
                       className="p-6 hover-lift border-2 transition-all duration-300 animate-fade-in" 
                       dir="rtl"
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      style={{ animationDelay: `${index * 30}ms` }}
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div>
@@ -1000,27 +906,103 @@ const Admin = () => {
 
             {/* Chat Tab */}
             <TabsContent value="chat" className="animate-fade-in">
-              {currentUserId && <AdminChatPanel currentUserId={currentUserId} />}
+              <div className="animate-slide-up">
+                {currentUserId && <AdminChatPanel currentUserId={currentUserId} />}
+              </div>
             </TabsContent>
           </Tabs>
         </div>
       </main>
 
-      {/* Student Grades Dialog */}
-      <Dialog open={gradeDialogOpen} onOpenChange={setGradeDialogOpen}>
-        <DialogContent dir="rtl" className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+      {/* Student Grades Dialog - Accessed via Gear Icon */}
+      <Dialog open={studentPeriodsDialogOpen} onOpenChange={setStudentPeriodsDialogOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-lg max-h-[85vh] overflow-y-auto animate-scale-in">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BookOpen className="w-5 h-5" />
-              نمرات {selectedStudent?.full_name}
+              نمرات {selectedStudentForGrades?.full_name}
+            </DialogTitle>
+            <DialogDescription>
+              افزودن دوره نمره و ویرایش نمرات دانش‌آموز
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Add new period */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="عنوان دوره (مثال: امتحان دی‌ماه)"
+                value={newPeriodTitle}
+                onChange={(e) => setNewPeriodTitle(e.target.value)}
+                className="flex-1 text-right"
+              />
+              <Button onClick={createPeriodForStudent} disabled={loading || !newPeriodTitle.trim()}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Existing periods */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                دوره‌های نمره
+              </h4>
+              {getPeriodsForStudentGrade().length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">هیچ دوره‌ای وجود ندارد</p>
+              ) : (
+                getPeriodsForStudentGrade().map((period, index) => (
+                  <div 
+                    key={period.id} 
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border transition-all duration-200 hover:bg-muted animate-fade-in"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <span className="font-medium">{period.title}</span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openGradeDialog(period)}
+                        className="gap-1 transition-all duration-200 hover:scale-105"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        نمرات
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => deleteGradePeriod(period.id)}
+                        className="transition-all duration-200 hover:scale-105"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Grades for Period Dialog */}
+      <Dialog open={gradeDialogOpen} onOpenChange={setGradeDialogOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-lg max-h-[80vh] overflow-y-auto animate-scale-in">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5" />
+              نمرات {selectedStudentForGrades?.full_name}
             </DialogTitle>
             <DialogDescription>
               دوره: {selectedPeriod?.title}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
-            {SUBJECT_OPTIONS.map((subject) => (
-              <div key={subject.value} className="flex items-center gap-4">
+            {SUBJECT_OPTIONS.map((subject, index) => (
+              <div 
+                key={subject.value} 
+                className="flex items-center gap-4 animate-fade-in"
+                style={{ animationDelay: `${index * 30}ms` }}
+              >
                 <label className="w-32 font-medium text-right text-sm">{subject.label}:</label>
                 <Input
                   value={studentGrades[subject.value] || ""}
