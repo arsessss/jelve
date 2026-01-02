@@ -7,6 +7,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting using in-memory store
+const passwordAttempts = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function checkRateLimit(token: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = passwordAttempts.get(token);
+  
+  if (!record || now > record.resetAt) {
+    passwordAttempts.set(token, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX) {
+    return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
+  }
+  
+  record.count++;
+  return { allowed: true };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -19,6 +41,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'تمام فیلدها الزامی است' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Rate limit password change attempts
+    const rateCheck = checkRateLimit(token);
+    if (!rateCheck.allowed) {
+      console.log('Password change rate limit exceeded');
+      return new Response(
+        JSON.stringify({ error: `تعداد درخواست‌ها بیش از حد مجاز است. ${rateCheck.retryAfter} ثانیه صبر کنید` }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateCheck.retryAfter) } }
       );
     }
 
