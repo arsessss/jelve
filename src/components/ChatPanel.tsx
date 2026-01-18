@@ -11,7 +11,7 @@ import { customAuth } from "@/lib/auth";
 import { chatApi, Conversation, ChatMessage, ChatUser } from "@/lib/chat-api";
 import { 
   MessageSquare, Send, Plus, Users, User, Search, 
-  Paperclip, X, FileText, ArrowLeft, UserPlus, Settings, Crown, Edit2
+  Paperclip, X, FileText, ArrowLeft, UserPlus, Settings, Crown, Edit2, Trash2
 } from "lucide-react";
 
 interface ChatPanelProps {
@@ -279,6 +279,32 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
     setSearchResults([]);
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!selectedConversation) return;
+    const { error } = await chatApi.deleteMessage(selectedConversation.id, messageId);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+    toast({ title: "حذف شد", description: "پیام حذف شد" });
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!selectedConversation) return;
+    if (!confirm("آیا از حذف این گفتگو اطمینان دارید؟")) return;
+    
+    const { error } = await chatApi.deleteConversation(selectedConversation.id);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    setConversations(prev => prev.filter(c => c.id !== selectedConversation.id));
+    setSelectedConversation(null);
+    setMessages([]);
+    toast({ title: "حذف شد", description: "گفتگو حذف شد" });
+  };
+
   const getConversationName = (conv: Conversation) => {
     if (conv.is_group) return conv.name || "گروه";
     const other = conv.participants?.find(p => p.id !== currentUserId);
@@ -488,6 +514,15 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                   </p>
                 )}
               </div>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={handleDeleteConversation}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                title="حذف گفتگو"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
               {selectedConversation.is_group && (
                 <Dialog open={showGroupSettings} onOpenChange={(open) => {
                   setShowGroupSettings(open);
@@ -611,8 +646,8 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                 {messages.map(msg => {
                   const isOwn = msg.sender_id === currentUserId;
                   return (
-                    <div key={msg.id} className={`flex ${isOwn ? 'justify-start' : 'justify-end'}`}>
-                      <div className={`max-w-[75%] ${isOwn ? 'order-1' : 'order-2'}`}>
+                    <div key={msg.id} className={`flex ${isOwn ? 'justify-start' : 'justify-end'} group`}>
+                      <div className={`max-w-[75%] ${isOwn ? 'order-1' : 'order-2'} relative`}>
                         {!isOwn && msg.sender && (
                           <p className="text-xs text-muted-foreground mb-1 text-right">
                             {msg.sender.full_name || msg.sender.username}
@@ -645,9 +680,20 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                           )}
                           {msg.content && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
                         </div>
-                        <p className={`text-xs text-muted-foreground mt-1 ${isOwn ? 'text-left' : 'text-right'}`}>
-                          {new Date(msg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                        <div className={`flex items-center gap-2 mt-1 ${isOwn ? 'justify-start' : 'justify-end'}`}>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(msg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {isOwn && (
+                            <button
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive/80"
+                              title="حذف پیام"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );

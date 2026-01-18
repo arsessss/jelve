@@ -537,30 +537,30 @@ const Admin = () => {
 
           <Tabs defaultValue="users" className="w-full" dir="rtl">
             <TabsList className="grid w-full grid-cols-5 mb-8 h-auto p-1">
-              <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm py-3">
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">کاربران</span>
               </TabsTrigger>
-              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm py-3">
                 <Video className="w-4 h-4" />
                 <span className="hidden sm:inline">کلاس‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="jozveh" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="jozveh" className="gap-2 text-xs sm:text-sm py-3">
                 <FileText className="w-4 h-4" />
                 <span className="hidden sm:inline">جزوه‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm py-3">
                 <MessageSquare className="w-4 h-4" />
                 <span className="hidden sm:inline">پیام‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="chat" className="gap-2 text-xs sm:text-sm py-3 transition-all duration-200 data-[state=active]:animate-scale-in">
+              <TabsTrigger value="chat" className="gap-2 text-xs sm:text-sm py-3">
                 <Send className="w-4 h-4" />
                 <span className="hidden sm:inline">چت</span>
               </TabsTrigger>
             </TabsList>
 
             {/* Users Tab - With Gear Icon for Grades */}
-            <TabsContent value="users" className="space-y-6 animate-fade-in">
+            <TabsContent value="users" className="space-y-6">
               {/* Create User Form */}
               <Card className="p-6 border-2 transition-all duration-300 hover:shadow-lg">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -698,7 +698,7 @@ const Admin = () => {
             </TabsContent>
 
             {/* Classes Tab */}
-            <TabsContent value="classes" className="space-y-6 animate-fade-in">
+            <TabsContent value="classes" className="space-y-6">
               <Card className="p-6 border-2 transition-all duration-300 hover:shadow-lg">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <Plus className="w-5 h-5" />
@@ -766,7 +766,7 @@ const Admin = () => {
             </TabsContent>
 
             {/* Jozveh Tab */}
-            <TabsContent value="jozveh" className="space-y-6 animate-fade-in">
+            <TabsContent value="jozveh" className="space-y-6">
               <Card className="p-6 border-2 transition-all duration-300 hover:shadow-lg">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <Plus className="w-5 h-5" />
@@ -859,7 +859,7 @@ const Admin = () => {
             </TabsContent>
 
             {/* Messages Tab */}
-            <TabsContent value="messages" className="animate-fade-in">
+            <TabsContent value="messages">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {messages.length === 0 ? (
                   <Card className="p-12 text-center border-2 col-span-full">
@@ -900,7 +900,7 @@ const Admin = () => {
             </TabsContent>
 
             {/* Chat Tab */}
-            <TabsContent value="chat" className="animate-fade-in">
+            <TabsContent value="chat">
               {currentUserId && <ChatPanel currentUserId={currentUserId} />}
             </TabsContent>
           </Tabs>
