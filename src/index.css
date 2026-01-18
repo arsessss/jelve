@@ -158,6 +158,12 @@ All colors MUST be HSL.
 @layer base {
   * {
     @apply border-border;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
   }
 
   body {
@@ -166,6 +172,7 @@ All colors MUST be HSL.
     font-feature-settings: "kern" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
 
   html[dir="rtl"] {
@@ -175,6 +182,7 @@ All colors MUST be HSL.
   /* Smooth page transitions */
   html {
     scroll-behavior: smooth;
+    overflow-x: hidden;
   }
 
   /* Safe area for PWA - applied to header instead of body */
