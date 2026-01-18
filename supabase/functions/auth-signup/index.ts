@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import { hashSync } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,8 +86,8 @@ serve(async (req) => {
       );
     }
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password);
+    // Hash the password (use hashSync for edge function compatibility)
+    const hashedPassword = hashSync(password);
 
     // Create user
     const { data: newUser, error: userError } = await supabase
