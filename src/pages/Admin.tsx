@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2 } from "lucide-react";
-import { AdminChatPanel } from "@/components/AdminChatPanel";
+import { ChatPanel } from "@/components/ChatPanel";
 
 interface Student {
   id: string;
@@ -624,11 +624,10 @@ const Admin = () => {
                   لیست ادمین‌ها
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {adminUsers.map((admin, index) => (
+                  {adminUsers.map((admin) => (
                     <div 
                       key={admin.id} 
-                      className="p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 30}ms` }}
+                      className="p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02]"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center">
@@ -654,11 +653,10 @@ const Admin = () => {
                   لیست دانش‌آموزان
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {students.map((student, index) => (
+                  {students.map((student) => (
                     <div 
                       key={student.id} 
-                      className="p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 30}ms` }}
+                      className="p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02]"
                     >
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex items-center gap-3">
@@ -741,11 +739,10 @@ const Admin = () => {
               <Card className="p-6 border-2">
                 <h3 className="text-xl font-bold mb-4">لیست کلاس‌های آنلاین</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {onlineClasses.map((cls, index) => (
+                  {onlineClasses.map((cls) => (
                     <div 
                       key={cls.id} 
-                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 30}ms` }}
+                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02]"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="font-bold truncate">{cls.title}</p>
@@ -830,11 +827,10 @@ const Admin = () => {
               <Card className="p-6 border-2">
                 <h3 className="text-xl font-bold mb-4">لیست جزوه‌ها</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {jozvehList.map((jozveh, index) => (
+                  {jozvehList.map((jozveh) => (
                     <div 
                       key={jozveh.id} 
-                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02] animate-fade-in"
-                      style={{ animationDelay: `${index * 30}ms` }}
+                      className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border transition-all duration-300 hover:scale-[1.02]"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <FileText className="w-8 h-8 text-muted-foreground shrink-0" />
@@ -871,12 +867,11 @@ const Admin = () => {
                     <p className="text-muted-foreground text-lg">هیچ پیامی وجود ندارد</p>
                   </Card>
                 ) : (
-                  messages.map((msg, index) => (
+                  messages.map((msg) => (
                     <Card 
                       key={msg.id} 
-                      className="p-6 hover-lift border-2 transition-all duration-300 animate-fade-in" 
+                      className="p-6 hover-lift border-2 transition-all duration-300" 
                       dir="rtl"
-                      style={{ animationDelay: `${index * 30}ms` }}
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div>
@@ -906,9 +901,7 @@ const Admin = () => {
 
             {/* Chat Tab */}
             <TabsContent value="chat" className="animate-fade-in">
-              <div className="animate-slide-up">
-                {currentUserId && <AdminChatPanel currentUserId={currentUserId} />}
-              </div>
+              {currentUserId && <ChatPanel currentUserId={currentUserId} />}
             </TabsContent>
           </Tabs>
         </div>
@@ -950,11 +943,10 @@ const Admin = () => {
               {getPeriodsForStudentGrade().length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">هیچ دوره‌ای وجود ندارد</p>
               ) : (
-                getPeriodsForStudentGrade().map((period, index) => (
+                getPeriodsForStudentGrade().map((period) => (
                   <div 
                     key={period.id} 
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border transition-all duration-200 hover:bg-muted animate-fade-in"
-                    style={{ animationDelay: `${index * 50}ms` }}
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border transition-all duration-200 hover:bg-muted"
                   >
                     <span className="font-medium">{period.title}</span>
                     <div className="flex gap-2">
@@ -997,11 +989,10 @@ const Admin = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
-            {SUBJECT_OPTIONS.map((subject, index) => (
+            {SUBJECT_OPTIONS.map((subject) => (
               <div 
                 key={subject.value} 
-                className="flex items-center gap-4 animate-fade-in"
-                style={{ animationDelay: `${index * 30}ms` }}
+                className="flex items-center gap-4"
               >
                 <label className="w-32 font-medium text-right text-sm">{subject.label}:</label>
                 <Input
