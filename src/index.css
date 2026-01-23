@@ -11,6 +11,10 @@ All colors MUST be HSL.
     --background: 0 0% 100%;
     --foreground: 0 0% 3%;
 
+    /* Global motion tokens (keep animations in sync) */
+    --motion-duration: 800ms;
+    --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3%;
 
@@ -213,31 +217,31 @@ All colors MUST be HSL.
 
   /* Animation classes */
   .animate-fade-in {
-    animation: fade-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: fade-in var(--motion-duration) var(--motion-ease) forwards;
   }
 
   .animate-slide-up {
-    animation: slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: slide-up var(--motion-duration) var(--motion-ease) forwards;
   }
 
   .animate-slide-down {
-    animation: slide-down 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: slide-down var(--motion-duration) var(--motion-ease) forwards;
   }
 
   .animate-scale-in {
-    animation: scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: scale-in var(--motion-duration) var(--motion-ease) forwards;
   }
 
   .animate-bounce-in {
-    animation: bounce-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+    animation: bounce-in var(--motion-duration) var(--motion-ease) forwards;
   }
 
   .animate-slide-in-right {
-    animation: slide-in-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: slide-in-right var(--motion-duration) var(--motion-ease) forwards;
   }
 
   .animate-slide-out-right {
-    animation: slide-out-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: slide-out-right var(--motion-duration) var(--motion-ease) forwards;
   }
 
   /* Nav link animation */

@@ -91,7 +91,7 @@ const Contact = () => {
 
             <Card className="max-w-2xl mx-auto p-8 animate-scale-in transition-all duration-500 hover:shadow-lg">
               <form onSubmit={handleSubmit} className="space-y-6" dir="rtl">
-                <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+                <div>
                   <label className="block text-sm font-medium mb-2">نام و نام خانوادگی</label>
                   <Input
                     value={name}
@@ -102,7 +102,7 @@ const Contact = () => {
                   />
                 </div>
 
-                <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
+                <div>
                   <label className="block text-sm font-medium mb-2">شماره تماس</label>
                   <Input
                     value={phone}
@@ -115,7 +115,7 @@ const Contact = () => {
                   />
                 </div>
 
-                <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
+                <div>
                   <label className="block text-sm font-medium mb-2">پیام</label>
                   <Textarea
                     value={message}
@@ -129,8 +129,7 @@ const Contact = () => {
 
                 <Button 
                   type="submit" 
-                  className="w-full gradient-primary text-primary-foreground font-bold gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] animate-fade-in"
-                  style={{ animationDelay: '400ms' }}
+                  className="w-full gradient-primary text-primary-foreground font-bold gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   disabled={loading}
                 >
                   {loading ? (
