@@ -101,7 +101,7 @@ const Login = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6" dir="rtl">
-              <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+              <div>
                 <label className="block text-sm font-medium mb-2">نوع کاربری</label>
                 <Select value={selectedRole} onValueChange={(value: Role) => setSelectedRole(value)}>
                   <SelectTrigger className="text-right transition-all duration-200 focus:scale-[1.01]">
@@ -125,7 +125,7 @@ const Login = () => {
                 </Select>
               </div>
 
-              <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
+              <div>
                 <label className="block text-sm font-medium mb-2">نام کاربری</label>
                 <div className="relative">
                   <User className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground transition-colors duration-200" />
@@ -139,7 +139,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
+              <div>
                 <label className="block text-sm font-medium mb-2">رمز عبور</label>
                 <div className="relative">
                   <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground transition-colors duration-200" />
@@ -156,8 +156,7 @@ const Login = () => {
 
               <Button 
                 type="submit" 
-                className="w-full gradient-primary text-primary-foreground font-bold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] animate-fade-in"
-                style={{ animationDelay: '400ms' }}
+                className="w-full gradient-primary text-primary-foreground font-bold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                 disabled={loading}
               >
                 {loading ? (

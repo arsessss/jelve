@@ -438,27 +438,27 @@ const Student = () => {
                 </div>
               </Card>
 
-              <Tabs defaultValue="classes" className="w-full animate-slide-up" dir="rtl">
+              <Tabs defaultValue="classes" className="w-full" dir="rtl">
                 <TabsList className="grid w-full grid-cols-3 mb-6 h-auto p-1">
-                  <TabsTrigger value="classes" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
+                  <TabsTrigger value="classes" className="gap-2 py-3 text-sm">
                     <Video className="w-4 h-4" />
                     <span className="hidden sm:inline">کلاس‌ها</span>
                   </TabsTrigger>
-                  <TabsTrigger value="jozveh" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
+                  <TabsTrigger value="jozveh" className="gap-2 py-3 text-sm">
                     <BookOpen className="w-4 h-4" />
                     <span className="hidden sm:inline">جزوه</span>
                   </TabsTrigger>
-                  <TabsTrigger value="chat" className="gap-2 py-3 text-sm data-[state=active]:animate-scale-in">
+                  <TabsTrigger value="chat" className="gap-2 py-3 text-sm">
                     <MessageSquare className="w-4 h-4" />
                     <span className="hidden sm:inline">پیام‌ها</span>
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chat" className="animate-fade-in">
+                <TabsContent value="chat">
                   <ChatPanel currentUserId={session?.user.id || ''} />
                 </TabsContent>
 
-                <TabsContent value="classes" className="animate-fade-in">
+                <TabsContent value="classes">
                   <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
                     <div className="flex items-center gap-3 mb-6">
                       <Video className="w-8 h-8 text-foreground" />
@@ -477,7 +477,6 @@ const Student = () => {
                             key={cls.id}
                             onClick={() => handleLinkClick(cls.link)}
                             className="p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted cursor-pointer transition-all duration-300 hover:scale-[1.02] group"
-                            style={{ animationDelay: `${index * 50}ms` }}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
@@ -493,7 +492,7 @@ const Student = () => {
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="jozveh" className="space-y-6 animate-fade-in">
+                <TabsContent value="jozveh" className="space-y-6">
                   {/* Jozveh List */}
                   <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
                     <div className="flex items-center gap-3 mb-6">
@@ -512,7 +511,6 @@ const Student = () => {
                           <div
                             key={jozveh.id}
                             className="p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 hover:scale-[1.02]"
-                            style={{ animationDelay: `${index * 50}ms` }}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -550,7 +548,6 @@ const Student = () => {
                         <div 
                           key={subject.value} 
                           className="p-4 bg-muted/50 rounded-lg border border-border text-center hover:border-foreground/20 transition-all duration-300 hover:scale-105"
-                          style={{ animationDelay: `${index * 100}ms` }}
                         >
                           <p className="text-sm text-muted-foreground mb-1">{subject.label}</p>
                           <p className="text-2xl font-bold">{getMyGradeForSubject(subject.value)}</p>
