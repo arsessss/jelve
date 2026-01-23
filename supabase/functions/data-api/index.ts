@@ -106,6 +106,8 @@ serve(async (req) => {
     const permissions: Record<string, { read: string[]; write: string[]; delete: string[] }> = {
       students: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       student_grades: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
+      grade_periods: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
+      student_period_grades: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       online_classes: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       jozveh: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       contact_messages: { read: ['admin'], write: [], delete: ['admin'] },
