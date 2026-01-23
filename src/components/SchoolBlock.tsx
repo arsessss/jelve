@@ -7,11 +7,10 @@ interface SchoolBlockProps {
   delay?: number;
 }
 
-export const SchoolBlock = ({ title, description, delay = 0 }: SchoolBlockProps) => {
+export const SchoolBlock = ({ title, description, delay: _delay = 0 }: SchoolBlockProps) => {
   return (
     <Card 
-      className="group p-8 hover-lift animate-slide-up border-2 border-border hover:border-foreground/20 transition-all duration-500 relative overflow-hidden"
-      style={{ animationDelay: `${delay}ms` }}
+      className="group p-8 hover-lift border-2 border-border hover:border-foreground/20 transition-all duration-500 relative overflow-hidden"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-foreground/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       
