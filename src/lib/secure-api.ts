@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "./auth";
+import { withRetry } from "./network-resilience";
 
 interface ApiResponse<T = unknown> {
   data?: T;
@@ -21,21 +22,24 @@ async function apiCall<T = unknown>({ table, action, data, filters, id }: ApiPar
   }
 
   try {
-    const { data: result, error } = await supabase.functions.invoke('data-api', {
-      body: {
-        token: session.token,
-        table,
-        action,
-        data,
-        filters,
-        id,
-      },
-    });
+    const result = await withRetry(async () => {
+      const { data: result, error } = await supabase.functions.invoke('data-api', {
+        body: {
+          token: session.token,
+          table,
+          action,
+          data,
+          filters,
+          id,
+        },
+      });
 
-    if (error) {
-      console.error('API call error:', error);
-      return { error: error.message || 'API error' };
-    }
+      if (error) {
+        throw error;
+      }
+
+      return result;
+    });
 
     if (result.error) {
       return { error: result.error };
@@ -44,7 +48,8 @@ async function apiCall<T = unknown>({ table, action, data, filters, id }: ApiPar
     return { data: result.data as T };
   } catch (err) {
     console.error('API error:', err);
-    return { error: 'Network error' };
+    const errorMessage = err instanceof Error ? err.message : 'خطای شبکه';
+    return { error: errorMessage };
   }
 }
 

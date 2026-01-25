@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withRetry } from "./network-resilience";
 
 export interface CustomUser {
   id: string;
@@ -18,14 +19,17 @@ const SESSION_KEY = "jelve_session";
 export const customAuth = {
   async login(username: string, password: string): Promise<{ session: AuthSession | null; error: string | null }> {
     try {
-      const { data, error } = await supabase.functions.invoke('auth-login', {
-        body: { username, password }
-      });
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase.functions.invoke('auth-login', {
+          body: { username, password }
+        });
 
-      if (error) {
-        console.error("Login edge function error:", error);
-        return { session: null, error: "خطا در برقراری ارتباط با سرور" };
-      }
+        if (error) {
+          throw error;
+        }
+
+        return data;
+      });
 
       if (data.error) {
         return { session: null, error: data.error };
@@ -38,7 +42,8 @@ export const customAuth = {
       return { session, error: null };
     } catch (err) {
       console.error("Login error:", err);
-      return { session: null, error: "خطا در برقراری ارتباط با سرور" };
+      const errorMessage = err instanceof Error ? err.message : "خطا در برقراری ارتباط با سرور";
+      return { session: null, error: errorMessage };
     }
   },
 
@@ -68,11 +73,19 @@ export const customAuth = {
     if (!stored) return { valid: false, session: null };
 
     try {
-      const { data, error } = await supabase.functions.invoke('auth-validate', {
-        body: { token: stored.token }
-      });
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase.functions.invoke('auth-validate', {
+          body: { token: stored.token }
+        });
 
-      if (error || !data.valid) {
+        if (error) {
+          throw error;
+        }
+
+        return data;
+      }, { maxRetries: 2 });
+
+      if (!data.valid) {
         this.logout();
         return { valid: false, session: null };
       }
@@ -87,20 +100,24 @@ export const customAuth = {
 
       return { valid: true, session: updatedSession };
     } catch {
-      return { valid: false, session: null };
+      // On network error, trust local session if not expired
+      return { valid: true, session: stored };
     }
   },
 
   async createUser(username: string, password: string, fullName: string, role: "admin" | "student"): Promise<{ userId: string | null; error: string | null }> {
     try {
-      const { data, error } = await supabase.functions.invoke('auth-signup', {
-        body: { username, password, fullName, role }
-      });
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase.functions.invoke('auth-signup', {
+          body: { username, password, fullName, role }
+        });
 
-      if (error) {
-        console.error("Signup edge function error:", error);
-        return { userId: null, error: "خطا در برقراری ارتباط با سرور" };
-      }
+        if (error) {
+          throw error;
+        }
+
+        return data;
+      });
 
       if (data.error) {
         return { userId: null, error: data.error };
@@ -109,7 +126,8 @@ export const customAuth = {
       return { userId: data.userId, error: null };
     } catch (err) {
       console.error("Signup error:", err);
-      return { userId: null, error: "خطا در برقراری ارتباط با سرور" };
+      const errorMessage = err instanceof Error ? err.message : "خطا در برقراری ارتباط با سرور";
+      return { userId: null, error: errorMessage };
     }
   },
 
@@ -120,14 +138,17 @@ export const customAuth = {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('auth-change-password', {
-        body: { token: session.token, currentPassword, newPassword }
-      });
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase.functions.invoke('auth-change-password', {
+          body: { token: session.token, currentPassword, newPassword }
+        });
 
-      if (error) {
-        console.error("Change password edge function error:", error);
-        return { success: false, error: "خطا در برقراری ارتباط با سرور" };
-      }
+        if (error) {
+          throw error;
+        }
+
+        return data;
+      });
 
       if (data.error) {
         return { success: false, error: data.error };
@@ -136,7 +157,8 @@ export const customAuth = {
       return { success: true, error: null };
     } catch (err) {
       console.error("Change password error:", err);
-      return { success: false, error: "خطا در برقراری ارتباط با سرور" };
+      const errorMessage = err instanceof Error ? err.message : "خطا در برقراری ارتباط با سرور";
+      return { success: false, error: errorMessage };
     }
   },
 };

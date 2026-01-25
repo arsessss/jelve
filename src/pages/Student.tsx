@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -12,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { customAuth, AuthSession } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { ChatPanel } from "@/components/ChatPanel";
-import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText, Download, MessageSquare } from "lucide-react";
+import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText, Download, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 
 interface StudentData {
   id: string;
@@ -21,7 +22,15 @@ interface StudentData {
   student_id: string | null;
 }
 
-interface StudentGrade {
+interface GradePeriod {
+  id: string;
+  title: string;
+  grade: string;
+}
+
+interface PeriodGrade {
+  id: string;
+  period_id: string;
   subject: string;
   grade: string | null;
 }
@@ -65,9 +74,16 @@ const GRADE_OPTIONS = [
 ];
 
 const SUBJECT_OPTIONS = [
-  { value: "olom", label: "علوم" },
+  { value: "zaban", label: "زبان" },
   { value: "riazi", label: "ریاضی" },
-  { value: "tafakor", label: "تفکر" },
+  { value: "farsi", label: "فارسی" },
+  { value: "dini", label: "دینی" },
+  { value: "quran", label: "قرآن" },
+  { value: "arabi", label: "عربی" },
+  { value: "tafakor", label: "تفکر و سبک زندگی" },
+  { value: "fizik", label: "فیزیک" },
+  { value: "shimi", label: "شیمی" },
+  { value: "zist", label: "زیست" },
 ];
 
 const Student = () => {
@@ -76,7 +92,9 @@ const Student = () => {
   const [userData, setUserData] = useState<CustomUser | null>(null);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
-  const [myGrades, setMyGrades] = useState<StudentGrade[]>([]);
+  const [gradePeriods, setGradePeriods] = useState<GradePeriod[]>([]);
+  const [periodGrades, setPeriodGrades] = useState<PeriodGrade[]>([]);
+  const [openPeriods, setOpenPeriods] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -132,7 +150,8 @@ const Student = () => {
     if (studentData) {
       fetchOnlineClasses(studentData.grade);
       fetchJozveh(studentData.grade);
-      fetchMyGrades(studentData.id);
+      fetchGradePeriods(studentData.grade);
+      fetchPeriodGrades(studentData.id);
     }
   }, [studentData]);
 
@@ -165,10 +184,17 @@ const Student = () => {
     }
   };
 
-  const fetchMyGrades = async (studentId: string) => {
-    const { data, error } = await secureApi.select<StudentGrade>('student_grades', { student_id: studentId });
+  const fetchGradePeriods = async (grade: string) => {
+    const { data, error } = await secureApi.select<GradePeriod>('grade_periods', { grade });
     if (!error && data) {
-      setMyGrades(data);
+      setGradePeriods(data);
+    }
+  };
+
+  const fetchPeriodGrades = async (studentId: string) => {
+    const { data, error } = await secureApi.select<PeriodGrade>('student_period_grades', { student_id: studentId });
+    if (!error && data) {
+      setPeriodGrades(data);
     }
   };
 
@@ -187,9 +213,13 @@ const Student = () => {
     return found ? found.label : subject;
   };
 
-  const getMyGradeForSubject = (subject: string) => {
-    const found = myGrades.find(g => g.subject === subject);
-    return found?.grade || "—";
+  const getGradeForPeriodSubject = (periodId: string, subject: string) => {
+    const found = periodGrades.find(g => g.period_id === periodId && g.subject === subject);
+    return found?.grade || "---";
+  };
+
+  const togglePeriod = (periodId: string) => {
+    setOpenPeriods(prev => ({ ...prev, [periodId]: !prev[periodId] }));
   };
 
   const handlePasswordChange = async () => {
@@ -420,7 +450,7 @@ const Student = () => {
 
           {studentData && (
             <div className="space-y-6">
-              <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300 animate-fade-in" dir="rtl">
+              <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300 animate-fade-in" dir="rtl">
                 <div className="flex items-center gap-4">
                   <Avatar className="w-16 h-16 border-2 border-border transition-all duration-300 hover:scale-105">
                     <AvatarImage src={userData?.profile_picture || undefined} />
@@ -439,7 +469,7 @@ const Student = () => {
               </Card>
 
               <Tabs defaultValue="classes" className="w-full" dir="rtl">
-                <TabsList className="grid w-full grid-cols-3 mb-6 h-auto p-1">
+                <TabsList className="grid w-full grid-cols-4 mb-6 h-auto p-1">
                   <TabsTrigger value="classes" className="gap-2 py-3 text-sm">
                     <Video className="w-4 h-4" />
                     <span className="hidden sm:inline">کلاس‌ها</span>
@@ -447,6 +477,10 @@ const Student = () => {
                   <TabsTrigger value="jozveh" className="gap-2 py-3 text-sm">
                     <BookOpen className="w-4 h-4" />
                     <span className="hidden sm:inline">جزوه</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="grades" className="gap-2 py-3 text-sm">
+                    <GraduationCap className="w-4 h-4" />
+                    <span className="hidden sm:inline">نمرات</span>
                   </TabsTrigger>
                   <TabsTrigger value="chat" className="gap-2 py-3 text-sm">
                     <MessageSquare className="w-4 h-4" />
@@ -459,9 +493,9 @@ const Student = () => {
                 </TabsContent>
 
                 <TabsContent value="classes">
-                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
+                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
                     <div className="flex items-center gap-3 mb-6">
-                      <Video className="w-8 h-8 text-foreground" />
+                      <Video className="w-8 h-8 text-primary" />
                       <h3 className="text-xl font-bold">کلاس‌های آنلاین</h3>
                     </div>
                     
@@ -472,15 +506,15 @@ const Student = () => {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {onlineClasses.map((cls, index) => (
+                        {onlineClasses.map((cls) => (
                           <div
                             key={cls.id}
                             onClick={() => handleLinkClick(cls.link)}
-                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted cursor-pointer transition-all duration-300 hover:scale-[1.02] group"
+                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted cursor-pointer transition-all duration-300 hover:scale-[1.02] group"
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <Video className="w-5 h-5 text-foreground group-hover:text-primary transition-colors" />
+                                <Video className="w-5 h-5 text-primary group-hover:text-accent transition-colors" />
                                 <span className="font-medium">{cls.title}</span>
                               </div>
                               <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -492,11 +526,10 @@ const Student = () => {
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="jozveh" className="space-y-6">
-                  {/* Jozveh List */}
-                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
+                <TabsContent value="jozveh">
+                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
                     <div className="flex items-center gap-3 mb-6">
-                      <FileText className="w-8 h-8 text-foreground" />
+                      <FileText className="w-8 h-8 text-primary" />
                       <h3 className="text-xl font-bold">جزوه‌ها</h3>
                     </div>
                     
@@ -507,14 +540,14 @@ const Student = () => {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {jozvehList.map((jozveh, index) => (
+                        {jozvehList.map((jozveh) => (
                           <div
                             key={jozveh.id}
-                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-foreground/20 hover:bg-muted transition-all duration-300 hover:scale-[1.02]"
+                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted transition-all duration-300 hover:scale-[1.02]"
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <FileText className="w-5 h-5 text-foreground shrink-0" />
+                                <FileText className="w-5 h-5 text-primary shrink-0" />
                                 <div className="min-w-0">
                                   <p className="font-medium truncate">{jozveh.title}</p>
                                   <p className="text-sm text-muted-foreground">{getSubjectLabel(jozveh.subject)}</p>
@@ -535,25 +568,60 @@ const Student = () => {
                       </div>
                     )}
                   </Card>
+                </TabsContent>
 
-                  {/* Grades */}
-                  <Card className="p-6 border-2 hover:border-foreground/20 transition-all duration-300">
+                <TabsContent value="grades">
+                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
                     <div className="flex items-center gap-3 mb-6">
-                      <BookOpen className="w-8 h-8 text-foreground" />
+                      <GraduationCap className="w-8 h-8 text-primary" />
                       <h3 className="text-xl font-bold">نمرات من</h3>
                     </div>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {SUBJECT_OPTIONS.map((subject, index) => (
-                        <div 
-                          key={subject.value} 
-                          className="p-4 bg-muted/50 rounded-lg border border-border text-center hover:border-foreground/20 transition-all duration-300 hover:scale-105"
-                        >
-                          <p className="text-sm text-muted-foreground mb-1">{subject.label}</p>
-                          <p className="text-2xl font-bold">{getMyGradeForSubject(subject.value)}</p>
-                        </div>
-                      ))}
-                    </div>
+                    {gradePeriods.length === 0 ? (
+                      <div className="p-8 bg-muted/50 rounded-lg text-center">
+                        <GraduationCap className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                        <p className="text-muted-foreground">هیچ دوره نمره‌ای برای پایه شما وجود ندارد</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {gradePeriods.map((period) => (
+                          <Collapsible 
+                            key={period.id} 
+                            open={openPeriods[period.id]} 
+                            onOpenChange={() => togglePeriod(period.id)}
+                          >
+                            <CollapsibleTrigger asChild>
+                              <button className="w-full flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted transition-all duration-300">
+                                <span className="font-medium">{period.title}</span>
+                                {openPeriods[period.id] ? (
+                                  <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                                )}
+                              </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 bg-card rounded-lg border border-border">
+                                {SUBJECT_OPTIONS.map((subject) => {
+                                  const grade = getGradeForPeriodSubject(period.id, subject.value);
+                                  return (
+                                    <div 
+                                      key={subject.value} 
+                                      className="p-3 bg-muted/50 rounded-lg border border-border text-center hover:border-primary/20 transition-all duration-300"
+                                    >
+                                      <p className="text-xs text-muted-foreground mb-1">{subject.label}</p>
+                                      <p className={`text-lg font-bold ${grade === "---" ? "text-muted-foreground" : "text-primary"}`}>
+                                        {grade}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        ))}
+                      </div>
+                    )}
                   </Card>
                 </TabsContent>
               </Tabs>
