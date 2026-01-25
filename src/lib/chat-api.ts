@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "./auth";
+import { withRetry } from "./network-resilience";
 
 interface ChatApiResponse<T = unknown> {
   data?: T;
@@ -15,18 +16,21 @@ async function chatApiCall<T = unknown>(action: string, data?: Record<string, un
   }
 
   try {
-    const { data: result, error } = await supabase.functions.invoke('chat-api', {
-      body: {
-        token: session.token,
-        action,
-        data,
-      },
-    });
+    const result = await withRetry(async () => {
+      const { data: result, error } = await supabase.functions.invoke('chat-api', {
+        body: {
+          token: session.token,
+          action,
+          data,
+        },
+      });
 
-    if (error) {
-      console.error('Chat API error:', error);
-      return { error: error.message || 'API error' };
-    }
+      if (error) {
+        throw error;
+      }
+
+      return result;
+    });
 
     if (result.error) {
       return { error: result.error };
@@ -35,7 +39,8 @@ async function chatApiCall<T = unknown>(action: string, data?: Record<string, un
     return { data: result.data as T, existing: result.existing, deleted: result.deleted };
   } catch (err) {
     console.error('Chat API error:', err);
-    return { error: 'Network error' };
+    const errorMessage = err instanceof Error ? err.message : 'خطای شبکه';
+    return { error: errorMessage };
   }
 }
 

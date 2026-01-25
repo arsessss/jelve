@@ -11,7 +11,8 @@ import { customAuth } from "@/lib/auth";
 import { chatApi, Conversation, ChatMessage, ChatUser } from "@/lib/chat-api";
 import { 
   MessageSquare, Send, Plus, Users, User, Search, 
-  Paperclip, X, FileText, ArrowLeft, UserPlus, Settings, Crown, Edit2, Trash2
+  Paperclip, X, FileText, ArrowLeft, UserPlus, Settings, Crown, Edit2, Trash2,
+  LogOut, Mic, Square, Image as ImageIcon
 } from "lucide-react";
 
 interface ChatPanelProps {
@@ -34,8 +35,14 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
   const [selectedUsers, setSelectedUsers] = useState<ChatUser[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const groupPictureInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   const loadConversations = useCallback(async () => {
@@ -232,6 +239,138 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
     }
   };
 
+  const handleGroupPictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedConversation) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "خطا", description: "فقط فایل‌های تصویری مجاز هستند", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `group-${selectedConversation.id}-${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("profile-pictures")
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("profile-pictures")
+        .getPublicUrl(fileName);
+
+      const { error } = await chatApi.updateGroupPicture(selectedConversation.id, urlData.publicUrl);
+      if (error) throw new Error(error);
+
+      setSelectedConversation({ ...selectedConversation, group_picture: urlData.publicUrl });
+      loadConversations();
+      toast({ title: "موفق", description: "تصویر گروه تغییر کرد" });
+    } catch {
+      toast({ title: "خطا", description: "آپلود تصویر ناموفق بود", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (groupPictureInputRef.current) groupPictureInputRef.current.value = "";
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        await sendVoiceMessage(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch {
+      toast({ title: "خطا", description: "دسترسی به میکروفون امکان‌پذیر نیست", variant: "destructive" });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+    }
+  };
+
+  const sendVoiceMessage = async (audioBlob: Blob) => {
+    if (!selectedConversation) return;
+
+    setUploading(true);
+    try {
+      const fileName = `voice-${Date.now()}.webm`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("chat-files")
+        .upload(fileName, audioBlob);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("chat-files")
+        .getPublicUrl(fileName);
+
+      const { data, error } = await chatApi.sendMessage(
+        selectedConversation.id, 
+        undefined, 
+        urlData.publicUrl,
+        "voice-message.webm"
+      );
+
+      if (error) throw new Error(error);
+
+      if (data) {
+        const session = customAuth.getSession();
+        setMessages(prev => [...prev, { 
+          ...data, 
+          sender: { 
+            id: currentUserId, 
+            username: session?.user.username || '', 
+            full_name: session?.user.full_name || null, 
+            profile_picture: null 
+          } 
+        }]);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+        loadConversations();
+      }
+
+      toast({ title: "موفق", description: "پیام صوتی ارسال شد" });
+    } catch {
+      toast({ title: "خطا", description: "ارسال پیام صوتی ناموفق بود", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleRenameGroup = async () => {
     if (!selectedConversation || !editGroupName.trim()) return;
     const { error } = await chatApi.renameGroup(selectedConversation.id, editGroupName);
@@ -242,6 +381,28 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
     toast({ title: "موفق", description: "نام گروه تغییر کرد" });
     setSelectedConversation({ ...selectedConversation, name: editGroupName });
     loadConversations();
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!selectedConversation) return;
+    if (!confirm("آیا از خروج از این گروه اطمینان دارید؟")) return;
+    
+    const { error, deleted } = await chatApi.leaveGroup(selectedConversation.id);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    
+    if (deleted) {
+      setConversations(prev => prev.filter(c => c.id !== selectedConversation.id));
+    } else {
+      loadConversations();
+    }
+    
+    setSelectedConversation(null);
+    setMessages([]);
+    setShowGroupSettings(false);
+    toast({ title: "موفق", description: "از گروه خارج شدید" });
   };
 
   const handleMakeAdmin = async (userId: string) => {
@@ -312,7 +473,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
   };
 
   const getConversationAvatar = (conv: Conversation) => {
-    if (conv.is_group) return null;
+    if (conv.is_group) return conv.group_picture || null;
     const other = conv.participants?.find(p => p.id !== currentUserId);
     return other?.profile_picture;
   };
@@ -320,6 +481,11 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
   const isImageFile = (fileName: string | null) => {
     if (!fileName) return false;
     return /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+  };
+
+  const isAudioFile = (fileName: string | null) => {
+    if (!fileName) return false;
+    return /\.(mp3|wav|ogg|webm|m4a)$/i.test(fileName);
   };
 
   const isUserAdmin = (conv: Conversation, userId: string) => {
@@ -543,6 +709,33 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                       <DialogDescription>مدیریت گروه و اعضا</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
+                      {/* Group Picture - Only for admins */}
+                      {currentUserIsAdmin && (
+                        <div className="flex flex-col items-center gap-3">
+                          <Avatar className="w-20 h-20 border-2 border-border">
+                            <AvatarImage src={selectedConversation.group_picture || undefined} />
+                            <AvatarFallback><Users className="w-10 h-10" /></AvatarFallback>
+                          </Avatar>
+                          <input
+                            type="file"
+                            ref={groupPictureInputRef}
+                            onChange={handleGroupPictureUpload}
+                            accept="image/*"
+                            className="hidden"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => groupPictureInputRef.current?.click()}
+                            disabled={uploading}
+                            className="gap-2"
+                          >
+                            <ImageIcon className="w-4 h-4" />
+                            {uploading ? "در حال آپلود..." : "تغییر تصویر گروه"}
+                          </Button>
+                        </div>
+                      )}
+
                       {/* Rename Group - Only for admins */}
                       {currentUserIsAdmin && (
                         <div className="space-y-2">
@@ -635,6 +828,16 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                           })}
                         </div>
                       </div>
+
+                      {/* Leave Group Button */}
+                      <Button
+                        variant="destructive"
+                        className="w-full gap-2"
+                        onClick={handleLeaveGroup}
+                      >
+                        <LogOut className="w-4 h-4" />
+                        خروج از گروه
+                      </Button>
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -664,6 +867,12 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                                   alt={msg.file_name || "تصویر"} 
                                   className="max-w-full rounded-lg cursor-pointer"
                                   onClick={() => window.open(msg.file_url!, '_blank')}
+                                />
+                              ) : isAudioFile(msg.file_name) ? (
+                                <audio 
+                                  controls 
+                                  src={msg.file_url} 
+                                  className="max-w-full"
                                 />
                               ) : (
                                 <a 
@@ -713,7 +922,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                 variant="ghost" 
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
+                disabled={uploading || isRecording}
               >
                 {uploading ? (
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -721,16 +930,42 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                   <Paperclip className="w-4 h-4" />
                 )}
               </Button>
-              <Input
-                placeholder="پیام خود را بنویسید..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                className="flex-1 text-right"
-              />
-              <Button size="icon" onClick={sendMessage} disabled={!newMessage.trim()}>
-                <Send className="w-4 h-4" />
-              </Button>
+              {isRecording ? (
+                <>
+                  <div className="flex-1 flex items-center justify-center gap-2 text-destructive">
+                    <div className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+                    <span className="text-sm font-medium">{formatRecordingTime(recordingTime)}</span>
+                  </div>
+                  <Button 
+                    size="icon" 
+                    variant="destructive"
+                    onClick={stopRecording}
+                  >
+                    <Square className="w-4 h-4" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={startRecording}
+                    disabled={uploading}
+                  >
+                    <Mic className="w-4 h-4" />
+                  </Button>
+                  <Input
+                    placeholder="پیام خود را بنویسید..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                    className="flex-1 text-right"
+                  />
+                  <Button size="icon" onClick={sendMessage} disabled={!newMessage.trim()}>
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
             </div>
           </>
         ) : (
