@@ -353,16 +353,16 @@ const Student = () => {
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       
-      <main className="pt-28 pb-12 px-4">
+      <main className="pt-28 pb-12 px-4 animate-fade-in">
         <div className="container mx-auto max-w-4xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 animate-fade-in" dir="rtl">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8" dir="rtl">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
               پنل دانش‌آموز
             </h1>
             <div className="flex items-center gap-2">
               <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="gap-2 transition-all duration-300 hover:scale-105">
+                  <Button variant="outline" className="gap-2">
                     <Settings className="w-4 h-4" />
                     تنظیمات
                   </Button>
@@ -440,7 +440,7 @@ const Student = () => {
               <Button 
                 onClick={handleLogout}
                 variant="outline"
-                className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-all duration-300"
+                className="gap-2 hover:bg-destructive hover:text-destructive-foreground"
               >
                 <LogOut className="w-4 h-4" />
                 خروج
@@ -450,9 +450,9 @@ const Student = () => {
 
           {studentData && (
             <div className="space-y-6">
-              <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300 animate-fade-in" dir="rtl">
+              <Card className="p-6 border-2 border-primary/20" dir="rtl">
                 <div className="flex items-center gap-4">
-                  <Avatar className="w-16 h-16 border-2 border-border transition-all duration-300 hover:scale-105">
+                  <Avatar className="w-16 h-16 border-2 border-border">
                     <AvatarImage src={userData?.profile_picture || undefined} />
                     <AvatarFallback>
                       <GraduationCap className="w-8 h-8 text-muted-foreground" />
@@ -469,20 +469,20 @@ const Student = () => {
               </Card>
 
               <Tabs defaultValue="classes" className="w-full" dir="rtl">
-                <TabsList className="grid w-full grid-cols-4 mb-6 h-auto p-1">
-                  <TabsTrigger value="classes" className="gap-2 py-3 text-sm">
+                <TabsList className="grid w-full grid-cols-4 mb-6">
+                  <TabsTrigger value="classes" className="gap-2 text-sm">
                     <Video className="w-4 h-4" />
                     <span className="hidden sm:inline">کلاس‌ها</span>
                   </TabsTrigger>
-                  <TabsTrigger value="jozveh" className="gap-2 py-3 text-sm">
+                  <TabsTrigger value="jozveh" className="gap-2 text-sm">
                     <BookOpen className="w-4 h-4" />
                     <span className="hidden sm:inline">جزوه</span>
                   </TabsTrigger>
-                  <TabsTrigger value="grades" className="gap-2 py-3 text-sm">
+                  <TabsTrigger value="grades" className="gap-2 text-sm">
                     <GraduationCap className="w-4 h-4" />
                     <span className="hidden sm:inline">نمرات</span>
                   </TabsTrigger>
-                  <TabsTrigger value="chat" className="gap-2 py-3 text-sm">
+                  <TabsTrigger value="chat" className="gap-2 text-sm">
                     <MessageSquare className="w-4 h-4" />
                     <span className="hidden sm:inline">پیام‌ها</span>
                   </TabsTrigger>
@@ -493,7 +493,7 @@ const Student = () => {
                 </TabsContent>
 
                 <TabsContent value="classes">
-                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
+                  <Card className="p-6 border-2 border-primary/20">
                     <div className="flex items-center gap-3 mb-6">
                       <Video className="w-8 h-8 text-primary" />
                       <h3 className="text-xl font-bold">کلاس‌های آنلاین</h3>
@@ -510,11 +510,11 @@ const Student = () => {
                           <div
                             key={cls.id}
                             onClick={() => handleLinkClick(cls.link)}
-                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted cursor-pointer transition-all duration-300 hover:scale-[1.02] group"
+                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/30 hover:bg-muted cursor-pointer transition-colors group"
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <Video className="w-5 h-5 text-primary group-hover:text-accent transition-colors" />
+                                <Video className="w-5 h-5 text-primary" />
                                 <span className="font-medium">{cls.title}</span>
                               </div>
                               <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -527,7 +527,7 @@ const Student = () => {
                 </TabsContent>
 
                 <TabsContent value="jozveh">
-                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
+                  <Card className="p-6 border-2 border-primary/20">
                     <div className="flex items-center gap-3 mb-6">
                       <FileText className="w-8 h-8 text-primary" />
                       <h3 className="text-xl font-bold">جزوه‌ها</h3>
@@ -543,7 +543,7 @@ const Student = () => {
                         {jozvehList.map((jozveh) => (
                           <div
                             key={jozveh.id}
-                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted transition-all duration-300 hover:scale-[1.02]"
+                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/30 hover:bg-muted transition-colors"
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -571,7 +571,7 @@ const Student = () => {
                 </TabsContent>
 
                 <TabsContent value="grades">
-                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
+                  <Card className="p-6 border-2 border-primary/20">
                     <div className="flex items-center gap-3 mb-6">
                       <GraduationCap className="w-8 h-8 text-primary" />
                       <h3 className="text-xl font-bold">نمرات من</h3>
@@ -591,7 +591,7 @@ const Student = () => {
                             onOpenChange={() => togglePeriod(period.id)}
                           >
                             <CollapsibleTrigger asChild>
-                              <button className="w-full flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted transition-all duration-300">
+                              <button className="w-full flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/30 hover:bg-muted transition-colors">
                                 <span className="font-medium">{period.title}</span>
                                 {openPeriods[period.id] ? (
                                   <ChevronUp className="w-5 h-5 text-muted-foreground" />
@@ -607,7 +607,7 @@ const Student = () => {
                                   return (
                                     <div 
                                       key={subject.value} 
-                                      className="p-3 bg-muted/50 rounded-lg border border-border text-center hover:border-primary/20 transition-all duration-300"
+                                      className="p-3 bg-muted/50 rounded-lg border border-border text-center"
                                     >
                                       <p className="text-xs text-muted-foreground mb-1">{subject.label}</p>
                                       <p className={`text-lg font-bold ${grade === "---" ? "text-muted-foreground" : "text-primary"}`}>
