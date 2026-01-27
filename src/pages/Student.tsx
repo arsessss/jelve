@@ -3,8 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,7 +12,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { customAuth, AuthSession } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { ChatPanel } from "@/components/ChatPanel";
-import { LogOut, GraduationCap, Video, Settings, Camera, Lock, ExternalLink, User, BookOpen, FileText, Download, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { 
+  LogOut, GraduationCap, Video, Camera, Lock, ExternalLink, User, 
+  BookOpen, FileText, Download, MessageSquare, ChevronDown, ChevronUp,
+  Settings, Home, Pencil
+} from "lucide-react";
 
 interface StudentData {
   id: string;
@@ -86,6 +89,8 @@ const SUBJECT_OPTIONS = [
   { value: "zist", label: "زیست" },
 ];
 
+type ActiveSection = "account" | "grades" | "jozveh" | "main";
+
 const Student = () => {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [studentData, setStudentData] = useState<StudentData | null>(null);
@@ -96,7 +101,10 @@ const Student = () => {
   const [periodGrades, setPeriodGrades] = useState<PeriodGrade[]>([]);
   const [openPeriods, setOpenPeriods] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<ActiveSection>("main");
+  
+  // Account settings state
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -115,7 +123,6 @@ const Student = () => {
         return;
       }
 
-      // Validate session server-side to prevent localStorage manipulation
       const { valid, session: validatedSession } = await customAuth.validateSession();
       
       if (!valid || !validatedSession) {
@@ -224,29 +231,17 @@ const Student = () => {
 
   const handlePasswordChange = async () => {
     if (!currentPassword) {
-      toast({
-        title: "خطا",
-        description: "رمز عبور فعلی الزامی است",
-        variant: "destructive",
-      });
+      toast({ title: "خطا", description: "رمز عبور فعلی الزامی است", variant: "destructive" });
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      toast({
-        title: "خطا",
-        description: "رمزهای عبور مطابقت ندارند",
-        variant: "destructive",
-      });
+      toast({ title: "خطا", description: "رمزهای عبور مطابقت ندارند", variant: "destructive" });
       return;
     }
 
     if (newPassword.length < 6) {
-      toast({
-        title: "خطا",
-        description: "رمز عبور باید حداقل ۶ کاراکتر باشد",
-        variant: "destructive",
-      });
+      toast({ title: "خطا", description: "رمز عبور باید حداقل ۶ کاراکتر باشد", variant: "destructive" });
       return;
     }
 
@@ -255,23 +250,16 @@ const Student = () => {
     setChangingPassword(false);
 
     if (error) {
-      toast({
-        title: "خطا",
-        description: error,
-        variant: "destructive",
-      });
+      toast({ title: "خطا", description: error, variant: "destructive" });
       return;
     }
 
     if (success) {
-      toast({
-        title: "موفقیت‌آمیز",
-        description: "رمز عبور با موفقیت تغییر کرد",
-      });
+      toast({ title: "موفقیت‌آمیز", description: "رمز عبور با موفقیت تغییر کرد" });
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setSettingsOpen(false);
+      setSettingsDialogOpen(false);
     }
   };
 
@@ -280,11 +268,7 @@ const Student = () => {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      toast({
-        title: "خطا",
-        description: "فقط فایل‌های تصویری مجاز هستند",
-        variant: "destructive",
-      });
+      toast({ title: "خطا", description: "فقط فایل‌های تصویری مجاز هستند", variant: "destructive" });
       return;
     }
 
@@ -295,7 +279,6 @@ const Student = () => {
       const fileName = `${session?.user.id}-${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Storage upload uses direct Supabase client (public bucket)
       const { error: uploadError } = await supabase.storage
         .from("profile-pictures")
         .upload(filePath, file, { upsert: true });
@@ -306,7 +289,6 @@ const Student = () => {
         .from("profile-pictures")
         .getPublicUrl(filePath);
 
-      // Update user profile via secure API
       const { error: updateError } = await secureApi.update('custom_users', session?.user.id || '', { 
         profile_picture: urlData.publicUrl 
       });
@@ -315,16 +297,9 @@ const Student = () => {
 
       setUserData(prev => prev ? { ...prev, profile_picture: urlData.publicUrl } : null);
 
-      toast({
-        title: "موفقیت‌آمیز",
-        description: "تصویر پروفایل با موفقیت آپلود شد",
-      });
+      toast({ title: "موفقیت‌آمیز", description: "تصویر پروفایل با موفقیت آپلود شد" });
     } catch {
-      toast({
-        title: "خطا",
-        description: "آپلود تصویر با مشکل مواجه شد",
-        variant: "destructive",
-      });
+      toast({ title: "خطا", description: "آپلود تصویر با مشکل مواجه شد", variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -341,41 +316,67 @@ const Student = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-muted"></div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-muted animate-pulse"></div>
           <p className="text-lg text-muted-foreground">در حال بارگذاری...</p>
         </div>
       </div>
     );
   }
 
+  const sidebarItems = [
+    { id: "main" as ActiveSection, icon: Home, label: "صفحه اصلی" },
+    { id: "account" as ActiveSection, icon: User, label: "حساب کاربری" },
+    { id: "grades" as ActiveSection, icon: GraduationCap, label: "نمرات" },
+    { id: "jozveh" as ActiveSection, icon: BookOpen, label: "جزوه" },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       
-      <main className="pt-28 pb-12 px-4">
-        <div className="container mx-auto max-w-4xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 animate-fade-in" dir="rtl">
-            <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
-              پنل دانش‌آموز
-            </h1>
-            <div className="flex items-center gap-2">
-              <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="gap-2 transition-all duration-300 hover:scale-105">
-                    <Settings className="w-4 h-4" />
-                    تنظیمات
-                  </Button>
-                </DialogTrigger>
-                <DialogContent dir="rtl" className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>تنظیمات حساب</DialogTitle>
-                    <DialogDescription>تصویر پروفایل و رمز عبور خود را تغییر دهید</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-6 py-4">
-                    {/* Profile Picture */}
-                    <div className="flex flex-col items-center gap-4">
-                      <Avatar className="w-24 h-24 border-2 border-border transition-all duration-300 hover:scale-105">
+      <main className="pt-24 pb-12">
+        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-6rem)]">
+          {/* Sidebar Navigation */}
+          <aside className="w-full lg:w-64 bg-card border-b lg:border-b-0 lg:border-l border-border p-4 lg:p-6 lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)]" dir="rtl">
+            <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
+              {sidebarItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSection(item.id)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 whitespace-nowrap ${
+                    activeSection === item.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted/50 hover:bg-muted text-foreground"
+                  }`}
+                >
+                  <item.icon className="w-5 h-5 shrink-0" />
+                  <span className="font-medium">{item.label}</span>
+                </button>
+              ))}
+              
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground text-destructive transition-all duration-300 whitespace-nowrap lg:mt-auto"
+              >
+                <LogOut className="w-5 h-5 shrink-0" />
+                <span className="font-medium">خروج</span>
+              </button>
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <div className="flex-1 p-4 lg:p-8" dir="rtl">
+            {/* Account Section */}
+            {activeSection === "account" && (
+              <div className="space-y-6 animate-fade-in">
+                <h1 className="text-2xl font-bold">حساب کاربری</h1>
+                
+                {/* Profile Card */}
+                <Card className="p-6 border-2">
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <div className="relative">
+                      <Avatar className="w-24 h-24 border-4 border-border">
                         <AvatarImage src={userData?.profile_picture || undefined} />
                         <AvatarFallback>
                           <User className="w-12 h-12 text-muted-foreground" />
@@ -390,245 +391,248 @@ const Student = () => {
                       />
                       <Button
                         variant="outline"
+                        size="icon"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
-                        className="gap-2 transition-all duration-300 hover:scale-105"
+                        className="absolute -bottom-2 -right-2 rounded-full w-8 h-8"
                       >
                         <Camera className="w-4 h-4" />
-                        {uploading ? "در حال آپلود..." : "تغییر تصویر"}
                       </Button>
                     </div>
-
-                    {/* Password Change */}
-                    <div className="space-y-4">
-                      <h4 className="font-medium flex items-center gap-2">
-                        <Lock className="w-4 h-4" />
-                        تغییر رمز عبور
-                      </h4>
-                      <Input
-                        type="password"
-                        placeholder="رمز عبور فعلی"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="text-right transition-all duration-200 focus:scale-[1.01]"
-                      />
-                      <Input
-                        type="password"
-                        placeholder="رمز عبور جدید"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="text-right transition-all duration-200 focus:scale-[1.01]"
-                      />
-                      <Input
-                        type="password"
-                        placeholder="تکرار رمز عبور جدید"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="text-right transition-all duration-200 focus:scale-[1.01]"
-                      />
-                      <Button 
-                        onClick={handlePasswordChange} 
-                        className="w-full transition-all duration-300 hover:scale-[1.02]"
-                        disabled={changingPassword}
-                      >
-                        {changingPassword ? "در حال ذخیره..." : "ذخیره رمز عبور"}
-                      </Button>
+                    <div className="text-center sm:text-right">
+                      <h2 className="text-2xl font-bold">{studentData?.full_name}</h2>
+                      <p className="text-muted-foreground">پایه تحصیلی: {getGradeLabel(studentData?.grade || "")}</p>
+                      {studentData?.student_id && (
+                        <p className="text-sm text-muted-foreground">شماره دانش‌آموزی: {studentData.student_id}</p>
+                      )}
                     </div>
                   </div>
-                </DialogContent>
-              </Dialog>
-              <Button 
-                onClick={handleLogout}
-                variant="outline"
-                className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-all duration-300"
-              >
-                <LogOut className="w-4 h-4" />
-                خروج
-              </Button>
-            </div>
-          </div>
+                </Card>
 
-          {studentData && (
-            <div className="space-y-6">
-              <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300 animate-fade-in" dir="rtl">
-                <div className="flex items-center gap-4">
-                  <Avatar className="w-16 h-16 border-2 border-border transition-all duration-300 hover:scale-105">
-                    <AvatarImage src={userData?.profile_picture || undefined} />
-                    <AvatarFallback>
-                      <GraduationCap className="w-8 h-8 text-muted-foreground" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h2 className="text-2xl font-bold">{studentData.full_name}</h2>
-                    <p className="text-muted-foreground">پایه تحصیلی: {getGradeLabel(studentData.grade)}</p>
-                    {studentData.student_id && (
-                      <p className="text-sm text-muted-foreground">شماره دانش‌آموزی: {studentData.student_id}</p>
-                    )}
-                  </div>
+                {/* Quick Actions */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Card 
+                    className="p-6 border-2 cursor-pointer hover:border-primary/50 transition-all duration-300"
+                    onClick={() => setSettingsDialogOpen(true)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Lock className="w-6 h-6 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold">تغییر رمز عبور</h3>
+                        <p className="text-sm text-muted-foreground">رمز عبور خود را تغییر دهید</p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  <Card 
+                    className="p-6 border-2 cursor-pointer hover:border-primary/50 transition-all duration-300"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                        <Pencil className="w-6 h-6 text-accent" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold">ویرایش پروفایل</h3>
+                        <p className="text-sm text-muted-foreground">تصویر پروفایل خود را تغییر دهید</p>
+                      </div>
+                    </div>
+                  </Card>
                 </div>
-              </Card>
 
-              <Tabs defaultValue="classes" className="w-full" dir="rtl">
-                <TabsList className="grid w-full grid-cols-4 mb-6 h-auto p-1">
-                  <TabsTrigger value="classes" className="gap-2 py-3 text-sm">
-                    <Video className="w-4 h-4" />
-                    <span className="hidden sm:inline">کلاس‌ها</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="jozveh" className="gap-2 py-3 text-sm">
-                    <BookOpen className="w-4 h-4" />
-                    <span className="hidden sm:inline">جزوه</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="grades" className="gap-2 py-3 text-sm">
-                    <GraduationCap className="w-4 h-4" />
-                    <span className="hidden sm:inline">نمرات</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="chat" className="gap-2 py-3 text-sm">
-                    <MessageSquare className="w-4 h-4" />
-                    <span className="hidden sm:inline">پیام‌ها</span>
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="chat">
-                  <ChatPanel currentUserId={session?.user.id || ''} />
-                </TabsContent>
-
-                <TabsContent value="classes">
-                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
-                    <div className="flex items-center gap-3 mb-6">
-                      <Video className="w-8 h-8 text-primary" />
-                      <h3 className="text-xl font-bold">کلاس‌های آنلاین</h3>
-                    </div>
-                    
-                    {onlineClasses.length === 0 ? (
-                      <div className="p-8 bg-muted/50 rounded-lg text-center">
-                        <Video className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                        <p className="text-muted-foreground">هیچ کلاس آنلاینی برای پایه شما وجود ندارد</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {onlineClasses.map((cls) => (
-                          <div
-                            key={cls.id}
-                            onClick={() => handleLinkClick(cls.link)}
-                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted cursor-pointer transition-all duration-300 hover:scale-[1.02] group"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <Video className="w-5 h-5 text-primary group-hover:text-accent transition-colors" />
-                                <span className="font-medium">{cls.title}</span>
-                              </div>
-                              <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                            </div>
+                {/* Online Classes in Account */}
+                <Card className="p-6 border-2">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Video className="w-6 h-6 text-primary" />
+                    <h3 className="text-lg font-bold">کلاس‌های آنلاین</h3>
+                  </div>
+                  {onlineClasses.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">هیچ کلاس آنلاینی وجود ندارد</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {onlineClasses.map((cls) => (
+                        <div
+                          key={cls.id}
+                          onClick={() => handleLinkClick(cls.link)}
+                          className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border hover:bg-muted cursor-pointer transition-all duration-300"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Video className="w-5 h-5 text-primary" />
+                            <span className="font-medium">{cls.title}</span>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="jozveh">
-                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
-                    <div className="flex items-center gap-3 mb-6">
-                      <FileText className="w-8 h-8 text-primary" />
-                      <h3 className="text-xl font-bold">جزوه‌ها</h3>
+                          <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      ))}
                     </div>
-                    
-                    {jozvehList.length === 0 ? (
-                      <div className="p-8 bg-muted/50 rounded-lg text-center">
-                        <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                        <p className="text-muted-foreground">هیچ جزوه‌ای برای پایه شما وجود ندارد</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {jozvehList.map((jozveh) => (
-                          <div
-                            key={jozveh.id}
-                            className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted transition-all duration-300 hover:scale-[1.02]"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <FileText className="w-5 h-5 text-primary shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="font-medium truncate">{jozveh.title}</p>
-                                  <p className="text-sm text-muted-foreground">{getSubjectLabel(jozveh.subject)}</p>
-                                </div>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleLinkClick(jozveh.file_url || jozveh.link)}
-                                className="shrink-0 gap-1"
-                              >
-                                <Download className="w-4 h-4" />
-                                دانلود
-                              </Button>
+                  )}
+                </Card>
+              </div>
+            )}
+
+            {/* Grades Section */}
+            {activeSection === "grades" && (
+              <div className="space-y-6 animate-fade-in">
+                <h1 className="text-2xl font-bold flex items-center gap-3">
+                  <GraduationCap className="w-8 h-8 text-primary" />
+                  نمرات من
+                </h1>
+                
+                {gradePeriods.length === 0 ? (
+                  <Card className="p-12 text-center border-2">
+                    <GraduationCap className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground text-lg">هیچ دوره نمره‌ای برای پایه شما وجود ندارد</p>
+                  </Card>
+                ) : (
+                  <div className="space-y-4">
+                    {gradePeriods.map((period) => (
+                      <Collapsible 
+                        key={period.id} 
+                        open={openPeriods[period.id]} 
+                        onOpenChange={() => togglePeriod(period.id)}
+                      >
+                        <Card className="border-2 overflow-hidden">
+                          <CollapsibleTrigger asChild>
+                            <button className="w-full flex items-center justify-between p-5 hover:bg-muted/50 transition-all duration-300">
+                              <span className="text-lg font-bold">{period.title}</span>
+                              {openPeriods[period.id] ? (
+                                <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                              )}
+                            </button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 p-5 pt-0">
+                              {SUBJECT_OPTIONS.map((subject) => {
+                                const grade = getGradeForPeriodSubject(period.id, subject.value);
+                                return (
+                                  <div 
+                                    key={subject.value} 
+                                    className="p-4 bg-muted/50 rounded-lg border border-border text-center"
+                                  >
+                                    <p className="text-xs text-muted-foreground mb-2">{subject.label}</p>
+                                    <p className={`text-xl font-bold ${grade === "---" ? "text-muted-foreground" : "text-primary"}`}>
+                                      {grade}
+                                    </p>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </Card>
-                </TabsContent>
+                          </CollapsibleContent>
+                        </Card>
+                      </Collapsible>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-                <TabsContent value="grades">
-                  <Card className="p-6 border-2 hover:border-primary/20 transition-all duration-300">
-                    <div className="flex items-center gap-3 mb-6">
-                      <GraduationCap className="w-8 h-8 text-primary" />
-                      <h3 className="text-xl font-bold">نمرات من</h3>
-                    </div>
-                    
-                    {gradePeriods.length === 0 ? (
-                      <div className="p-8 bg-muted/50 rounded-lg text-center">
-                        <GraduationCap className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                        <p className="text-muted-foreground">هیچ دوره نمره‌ای برای پایه شما وجود ندارد</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {gradePeriods.map((period) => (
-                          <Collapsible 
-                            key={period.id} 
-                            open={openPeriods[period.id]} 
-                            onOpenChange={() => togglePeriod(period.id)}
-                          >
-                            <CollapsibleTrigger asChild>
-                              <button className="w-full flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/20 hover:bg-muted transition-all duration-300">
-                                <span className="font-medium">{period.title}</span>
-                                {openPeriods[period.id] ? (
-                                  <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                                ) : (
-                                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                                )}
-                              </button>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent className="mt-2">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 bg-card rounded-lg border border-border">
-                                {SUBJECT_OPTIONS.map((subject) => {
-                                  const grade = getGradeForPeriodSubject(period.id, subject.value);
-                                  return (
-                                    <div 
-                                      key={subject.value} 
-                                      className="p-3 bg-muted/50 rounded-lg border border-border text-center hover:border-primary/20 transition-all duration-300"
-                                    >
-                                      <p className="text-xs text-muted-foreground mb-1">{subject.label}</p>
-                                      <p className={`text-lg font-bold ${grade === "---" ? "text-muted-foreground" : "text-primary"}`}>
-                                        {grade}
-                                      </p>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        ))}
-                      </div>
-                    )}
+            {/* Jozveh Section */}
+            {activeSection === "jozveh" && (
+              <div className="space-y-6 animate-fade-in">
+                <h1 className="text-2xl font-bold flex items-center gap-3">
+                  <BookOpen className="w-8 h-8 text-primary" />
+                  جزوه‌ها
+                </h1>
+                
+                {jozvehList.length === 0 ? (
+                  <Card className="p-12 text-center border-2">
+                    <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground text-lg">هیچ جزوه‌ای برای پایه شما وجود ندارد</p>
                   </Card>
-                </TabsContent>
-              </Tabs>
-            </div>
-          )}
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {jozvehList.map((jozveh) => (
+                      <Card 
+                        key={jozveh.id}
+                        className="p-5 border-2 hover:border-primary/30 transition-all duration-300"
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <FileText className="w-6 h-6 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold truncate">{jozveh.title}</h3>
+                            <p className="text-sm text-muted-foreground">{getSubjectLabel(jozveh.subject)}</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleLinkClick(jozveh.file_url || jozveh.link)}
+                              className="mt-3 gap-2"
+                            >
+                              <Download className="w-4 h-4" />
+                              دانلود
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Main Section with Chat */}
+            {activeSection === "main" && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-2xl font-bold flex items-center gap-3">
+                    <MessageSquare className="w-8 h-8 text-primary" />
+                    پیام‌ها
+                  </h1>
+                </div>
+                
+                {session && <ChatPanel currentUserId={session.user.id} />}
+              </div>
+            )}
+          </div>
         </div>
       </main>
+
+      {/* Password Change Dialog */}
+      <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5" />
+              تغییر رمز عبور
+            </DialogTitle>
+            <DialogDescription>رمز عبور جدید خود را وارد کنید</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input
+              type="password"
+              placeholder="رمز عبور فعلی"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="text-right"
+            />
+            <Input
+              type="password"
+              placeholder="رمز عبور جدید"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="text-right"
+            />
+            <Input
+              type="password"
+              placeholder="تکرار رمز عبور جدید"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="text-right"
+            />
+            <Button 
+              onClick={handlePasswordChange} 
+              className="w-full"
+              disabled={changingPassword}
+            >
+              {changingPassword ? "در حال ذخیره..." : "ذخیره رمز عبور"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
