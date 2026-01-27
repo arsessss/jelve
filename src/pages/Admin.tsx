@@ -519,16 +519,16 @@ const Admin = () => {
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       
-      <main className="pt-28 pb-12 px-4 animate-fade-in">
+      <main className="pt-28 pb-12 px-4">
         <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8" dir="rtl">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 animate-fade-in" dir="rtl">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
               پنل مدیریت
             </h1>
             <Button 
               onClick={handleLogout}
               variant="outline"
-              className="gap-2 hover:bg-destructive hover:text-destructive-foreground"
+              className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-all duration-300"
             >
               <LogOut className="w-4 h-4" />
               خروج
@@ -536,24 +536,24 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="users" className="w-full" dir="rtl">
-            <TabsList className="grid w-full grid-cols-5 mb-6">
-              <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm">
+            <TabsList className="grid w-full grid-cols-5 mb-8 h-auto p-1">
+              <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm py-3">
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">کاربران</span>
               </TabsTrigger>
-              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm">
+              <TabsTrigger value="classes" className="gap-2 text-xs sm:text-sm py-3">
                 <Video className="w-4 h-4" />
                 <span className="hidden sm:inline">کلاس‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="jozveh" className="gap-2 text-xs sm:text-sm">
+              <TabsTrigger value="jozveh" className="gap-2 text-xs sm:text-sm py-3">
                 <FileText className="w-4 h-4" />
                 <span className="hidden sm:inline">جزوه‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm">
+              <TabsTrigger value="messages" className="gap-2 text-xs sm:text-sm py-3">
                 <MessageSquare className="w-4 h-4" />
                 <span className="hidden sm:inline">پیام‌ها</span>
               </TabsTrigger>
-              <TabsTrigger value="chat" className="gap-2 text-xs sm:text-sm">
+              <TabsTrigger value="chat" className="gap-2 text-xs sm:text-sm py-3">
                 <Send className="w-4 h-4" />
                 <span className="hidden sm:inline">چت</span>
               </TabsTrigger>
