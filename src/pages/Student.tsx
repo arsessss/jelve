@@ -12,10 +12,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { customAuth, AuthSession } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { ChatPanel } from "@/components/ChatPanel";
+import { useAkhbar, renderFormattedText } from "@/hooks/use-akhbar";
 import { 
   LogOut, GraduationCap, Video, Camera, Lock, ExternalLink, User, 
   BookOpen, FileText, Download, MessageSquare, ChevronDown, ChevronUp,
-  Settings, Home, Pencil
+  Settings, Home, Pencil, Newspaper
 } from "lucide-react";
 
 interface StudentData {
@@ -89,7 +90,7 @@ const SUBJECT_OPTIONS = [
   { value: "zist", label: "زیست" },
 ];
 
-type ActiveSection = "account" | "grades" | "jozveh" | "main";
+type ActiveSection = "account" | "grades" | "jozveh" | "main" | "akhbar";
 
 const Student = () => {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -101,7 +102,7 @@ const Student = () => {
   const [periodGrades, setPeriodGrades] = useState<PeriodGrade[]>([]);
   const [openPeriods, setOpenPeriods] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<ActiveSection>("main");
+  const [activeSection, setActiveSection] = useState<ActiveSection>("akhbar");
   
   // Account settings state
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -152,6 +153,12 @@ const Student = () => {
 
     validateAndLoadData();
   }, [navigate]);
+
+  // Akhbar hook - filter by student grade and only published
+  const { akhbarList } = useAkhbar({
+    filterByGrade: studentData?.grade,
+    onlyPublished: true,
+  });
 
   useEffect(() => {
     if (studentData) {
@@ -325,7 +332,8 @@ const Student = () => {
   }
 
   const sidebarItems = [
-    { id: "main" as ActiveSection, icon: Home, label: "صفحه اصلی" },
+    { id: "akhbar" as ActiveSection, icon: Newspaper, label: "اخبار" },
+    { id: "main" as ActiveSection, icon: Home, label: "پیام‌ها" },
     { id: "account" as ActiveSection, icon: User, label: "حساب کاربری" },
     { id: "grades" as ActiveSection, icon: GraduationCap, label: "نمرات" },
     { id: "jozveh" as ActiveSection, icon: BookOpen, label: "جزوه" },
@@ -585,6 +593,44 @@ const Student = () => {
                 </div>
                 
                 {session && <ChatPanel currentUserId={session.user.id} />}
+              </div>
+            )}
+
+            {/* Akhbar Section */}
+            {activeSection === "akhbar" && (
+              <div className="space-y-6 animate-fade-in">
+                <h1 className="text-2xl font-bold flex items-center gap-3">
+                  <Newspaper className="w-8 h-8 text-primary" />
+                  اخبار و اطلاعیه‌ها
+                </h1>
+                
+                {akhbarList.length === 0 ? (
+                  <Card className="p-12 text-center border-2">
+                    <Newspaper className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground text-lg">هیچ خبری وجود ندارد</p>
+                  </Card>
+                ) : (
+                  <div className="space-y-4">
+                    {akhbarList.map((item) => (
+                      <Card key={item.id} className="p-6 border-2">
+                        <h3 className="font-bold text-lg mb-2">{item.title}</h3>
+                        <p className="text-xs text-muted-foreground mb-4">
+                          {new Date(item.created_at).toLocaleDateString('fa-IR')}
+                        </p>
+                        {item.image_url && (
+                          <img 
+                            src={item.image_url} 
+                            alt={item.title} 
+                            className="w-full max-h-64 object-cover rounded-lg mb-4"
+                          />
+                        )}
+                        <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                          {renderFormattedText(item.content)}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

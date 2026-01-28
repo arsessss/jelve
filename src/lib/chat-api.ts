@@ -148,4 +148,10 @@ export const chatApi = {
       conversation_id: conversationId, 
       user_id: userId,
     }),
+  
+  kickMember: (conversationId: string, userId: string) =>
+    chatApiCall<{ success: boolean }>('kick_member', { 
+      conversation_id: conversationId, 
+      user_id: userId,
+    }),
 };

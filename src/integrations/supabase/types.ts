@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      akhbar: {
+        Row: {
+          content: string
+          created_at: string | null
+          created_by: string
+          id: string
+          image_url: string | null
+          is_published: boolean | null
+          target_grades: string[] | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          created_by: string
+          id?: string
+          image_url?: string | null
+          is_published?: boolean | null
+          target_grades?: string[] | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          created_by?: string
+          id?: string
+          image_url?: string | null
+          is_published?: boolean | null
+          target_grades?: string[] | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       contact_messages: {
         Row: {
           created_at: string

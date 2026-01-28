@@ -769,6 +769,68 @@ serve(async (req) => {
         );
       }
 
+      case 'kick_member': {
+        const conversationId = data?.conversation_id as string;
+        const targetUserId = data?.user_id as string;
+
+        if (!conversationId || !targetUserId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID and user ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Cannot kick yourself
+        if (targetUserId === userId) {
+          return new Response(
+            JSON.stringify({ error: 'Cannot kick yourself' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if requester is admin
+        const isAdmin = await isGroupAdmin(conversationId, userId);
+        if (!isAdmin) {
+          return new Response(
+            JSON.stringify({ error: 'Only group admins can kick members' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Cannot kick the group creator
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('created_by')
+          .eq('id', conversationId)
+          .single();
+
+        if (conv?.created_by === targetUserId) {
+          return new Response(
+            JSON.stringify({ error: 'Cannot kick the group creator' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Remove from participants
+        await supabase
+          .from('conversation_participants')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('user_id', targetUserId);
+
+        // Remove from admins if they were one
+        await supabase
+          .from('group_admins')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('user_id', targetUserId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),
