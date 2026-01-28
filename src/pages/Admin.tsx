@@ -2,18 +2,21 @@ import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
+import { useAkhbar, renderFormattedText, Akhbar } from "@/hooks/use-akhbar";
 import { 
   LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, 
   BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, 
-  Edit2, Home, X
+  Edit2, Home, Newspaper, Image as ImageIcon
 } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
 
@@ -103,7 +106,7 @@ const JOZVEH_SUBJECT_OPTIONS = [
   { value: "tafakor", label: "تفکر" },
 ];
 
-type ActiveSection = "main" | "users" | "classes" | "jozveh" | "messages" | "chat";
+type ActiveSection = "main" | "users" | "classes" | "jozveh" | "messages" | "chat" | "akhbar";
 
 const Admin = () => {
   const [loading, setLoading] = useState(false);
@@ -120,6 +123,13 @@ const Admin = () => {
   const jozvehFileRef = useRef<HTMLInputElement>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<ActiveSection>("main");
+  
+  // Akhbar state
+  const { akhbarList, createAkhbar, deleteAkhbar, uploadImage, refetch: refetchAkhbar } = useAkhbar();
+  const [newAkhbar, setNewAkhbar] = useState({ title: "", content: "", targetGrades: [] as string[], isPublished: true });
+  const [akhbarImage, setAkhbarImage] = useState<File | null>(null);
+  const akhbarImageRef = useRef<HTMLInputElement>(null);
+  const [akhbarLoading, setAkhbarLoading] = useState(false);
   
   // Student grades management
   const [selectedStudentForGrades, setSelectedStudentForGrades] = useState<Student | null>(null);
@@ -505,11 +515,58 @@ const Admin = () => {
     return gradePeriods.filter(p => p.grade === selectedStudentForGrades.grade);
   };
 
+  const handleCreateAkhbar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAkhbar.title.trim() || !newAkhbar.content.trim() || !currentUserId) {
+      toast({ title: "خطا", description: "عنوان و متن خبر الزامی است", variant: "destructive" });
+      return;
+    }
+    
+    setAkhbarLoading(true);
+    
+    let imageUrl: string | null = null;
+    if (akhbarImage) {
+      imageUrl = await uploadImage(akhbarImage);
+    }
+    
+    const success = await createAkhbar(
+      newAkhbar.title,
+      newAkhbar.content,
+      imageUrl,
+      newAkhbar.targetGrades,
+      newAkhbar.isPublished,
+      currentUserId
+    );
+    
+    if (success) {
+      setNewAkhbar({ title: "", content: "", targetGrades: [], isPublished: true });
+      setAkhbarImage(null);
+      if (akhbarImageRef.current) akhbarImageRef.current.value = "";
+    }
+    
+    setAkhbarLoading(false);
+  };
+
+  const handleDeleteAkhbar = async (id: string) => {
+    if (!confirm("آیا از حذف این خبر اطمینان دارید؟")) return;
+    await deleteAkhbar(id);
+  };
+
+  const toggleGradeInAkhbar = (grade: string) => {
+    setNewAkhbar(prev => ({
+      ...prev,
+      targetGrades: prev.targetGrades.includes(grade)
+        ? prev.targetGrades.filter(g => g !== grade)
+        : [...prev.targetGrades, grade]
+    }));
+  };
+
   const sidebarItems = [
     { id: "main" as ActiveSection, icon: Home, label: "صفحه اصلی" },
     { id: "users" as ActiveSection, icon: Users, label: "کاربران" },
     { id: "classes" as ActiveSection, icon: Video, label: "کلاس‌ها" },
     { id: "jozveh" as ActiveSection, icon: FileText, label: "جزوه‌ها" },
+    { id: "akhbar" as ActiveSection, icon: Newspaper, label: "اخبار" },
     { id: "messages" as ActiveSection, icon: MessageSquare, label: "پیام‌ها" },
     { id: "chat" as ActiveSection, icon: Send, label: "چت" },
   ];
@@ -937,6 +994,127 @@ const Admin = () => {
               </div>
             )}
 
+            {/* Akhbar Section */}
+            {activeSection === "akhbar" && (
+              <div className="space-y-6 animate-fade-in">
+                <h1 className="text-2xl font-bold flex items-center gap-3">
+                  <Newspaper className="w-8 h-8 text-primary" />
+                  مدیریت اخبار
+                </h1>
+
+                <Card className="p-6 border-2">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <Plus className="w-5 h-5" />
+                    افزودن خبر جدید
+                  </h3>
+                  <form onSubmit={handleCreateAkhbar} className="space-y-4">
+                    <Input
+                      placeholder="عنوان خبر"
+                      value={newAkhbar.title}
+                      onChange={(e) => setNewAkhbar({ ...newAkhbar, title: e.target.value })}
+                      required
+                      className="text-right"
+                    />
+                    <Textarea
+                      placeholder="متن خبر (از ** برای بولد کردن استفاده کنید)"
+                      value={newAkhbar.content}
+                      onChange={(e) => setNewAkhbar({ ...newAkhbar, content: e.target.value })}
+                      required
+                      className="text-right min-h-[120px]"
+                    />
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">تصویر (اختیاری)</label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          ref={akhbarImageRef}
+                          onChange={(e) => setAkhbarImage(e.target.files?.[0] || null)}
+                          className="hidden"
+                          accept="image/*"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => akhbarImageRef.current?.click()}
+                          className="w-full gap-2 justify-start"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                          {akhbarImage ? akhbarImage.name : "انتخاب تصویر"}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">پایه‌های هدف (خالی = همه)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {GRADE_OPTIONS.map(g => (
+                          <Button
+                            key={g.value}
+                            type="button"
+                            variant={newAkhbar.targetGrades.includes(g.value) ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => toggleGradeInAkhbar(g.value)}
+                          >
+                            {g.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={newAkhbar.isPublished}
+                        onCheckedChange={(checked) => setNewAkhbar({ ...newAkhbar, isPublished: checked })}
+                      />
+                      <label className="text-sm">منتشر شود</label>
+                    </div>
+                    <Button type="submit" disabled={akhbarLoading} className="w-full">
+                      {akhbarLoading ? "در حال ایجاد..." : "ایجاد خبر"}
+                    </Button>
+                  </form>
+                </Card>
+
+                <Card className="p-6 border-2">
+                  <h3 className="text-lg font-bold mb-4">لیست اخبار</h3>
+                  <div className="space-y-4">
+                    {akhbarList.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-4">هیچ خبری وجود ندارد</p>
+                    ) : (
+                      akhbarList.map((item) => (
+                        <div key={item.id} className="p-4 bg-muted/50 rounded-lg border border-border">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-bold text-lg">{item.title}</h4>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(item.created_at).toLocaleDateString('fa-IR')}
+                                {!item.is_published && " | پیش‌نویس"}
+                                {item.target_grades.length > 0 && ` | پایه‌ها: ${item.target_grades.join(', ')}`}
+                              </p>
+                            </div>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              onClick={() => handleDeleteAkhbar(item.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          {item.image_url && (
+                            <img 
+                              src={item.image_url} 
+                              alt={item.title} 
+                              className="w-full max-h-48 object-cover rounded-lg mb-3"
+                            />
+                          )}
+                          <p className="text-sm whitespace-pre-wrap">
+                            {renderFormattedText(item.content)}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              </div>
+            )}
+
             {/* Messages Section */}
             {activeSection === "messages" && (
               <div className="space-y-6 animate-fade-in">
@@ -998,16 +1176,8 @@ const Admin = () => {
       {/* Student Grades Dialog */}
       <Dialog open={studentPeriodsDialogOpen} onOpenChange={setStudentPeriodsDialogOpen}>
         <DialogContent dir="rtl" className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setStudentPeriodsDialogOpen(false)}
-              className="absolute left-0 top-0"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-            <DialogTitle className="flex items-center gap-2 pr-8">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
               <BookOpen className="w-5 h-5" />
               نمرات {selectedStudentForGrades?.full_name}
             </DialogTitle>
@@ -1069,16 +1239,8 @@ const Admin = () => {
       {/* Edit Grades Dialog */}
       <Dialog open={gradeDialogOpen} onOpenChange={setGradeDialogOpen}>
         <DialogContent dir="rtl" className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setGradeDialogOpen(false)}
-              className="absolute left-0 top-0"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-            <DialogTitle className="flex items-center gap-2 pr-8">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
               <BookOpen className="w-5 h-5" />
               نمرات {selectedStudentForGrades?.full_name}
             </DialogTitle>

@@ -111,8 +111,9 @@ serve(async (req) => {
       online_classes: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       jozveh: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       contact_messages: { read: ['admin'], write: [], delete: ['admin'] },
-      custom_users: { read: ['admin', 'student'], write: ['admin', 'student'], delete: ['admin'] }, // Students can read/update their own profile
+      custom_users: { read: ['admin', 'student'], write: ['admin', 'student'], delete: ['admin'] },
       user_roles: { read: ['admin'], write: ['admin'], delete: ['admin'] },
+      akhbar: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
     };
 
     const tablePerms = permissions[table];

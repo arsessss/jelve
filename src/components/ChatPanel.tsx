@@ -12,7 +12,7 @@ import { chatApi, Conversation, ChatMessage, ChatUser } from "@/lib/chat-api";
 import { 
   MessageSquare, Send, Plus, Users, User, Search, 
   Paperclip, X, FileText, ArrowLeft, UserPlus, Settings, Crown, Edit2, Trash2,
-  LogOut, Mic, Square, Image as ImageIcon
+  LogOut, Mic, Square, Image as ImageIcon, UserMinus
 } from "lucide-react";
 
 interface ChatPanelProps {
@@ -427,6 +427,19 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
     loadConversations();
   };
 
+  const handleKickMember = async (targetUserId: string) => {
+    if (!selectedConversation) return;
+    if (!confirm("آیا از حذف این کاربر از گروه اطمینان دارید؟")) return;
+    
+    const { error } = await chatApi.kickMember(selectedConversation.id, targetUserId);
+    if (error) {
+      toast({ title: "خطا", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "موفق", description: "کاربر از گروه حذف شد" });
+    loadConversations();
+  };
+
   const handleAddParticipant = async (user: ChatUser) => {
     if (!selectedConversation) return;
     const { error } = await chatApi.addParticipants(selectedConversation.id, [user.id]);
@@ -814,14 +827,25 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                                   </span>
                                 )}
                                 {currentUserIsAdmin && user.id !== currentUserId && !isCreator && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => userIsAdmin ? handleRemoveAdmin(user.id) : handleMakeAdmin(user.id)}
-                                    className="text-xs"
-                                  >
-                                    {userIsAdmin ? "برداشتن ادمین" : "ادمین کردن"}
-                                  </Button>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => userIsAdmin ? handleRemoveAdmin(user.id) : handleMakeAdmin(user.id)}
+                                      className="text-xs"
+                                    >
+                                      {userIsAdmin ? "برداشتن ادمین" : "ادمین کردن"}
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleKickMember(user.id)}
+                                      className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 w-7"
+                                      title="حذف از گروه"
+                                    >
+                                      <UserMinus className="w-3 h-3" />
+                                    </Button>
+                                  </div>
                                 )}
                               </div>
                             );
@@ -848,10 +872,17 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
               <div className="space-y-4">
                 {messages.map(msg => {
                   const isOwn = msg.sender_id === currentUserId;
+                  const showAvatar = selectedConversation.is_group && !isOwn && msg.sender;
                   return (
                     <div key={msg.id} className={`flex ${isOwn ? 'justify-start' : 'justify-end'} group`}>
-                      <div className={`max-w-[75%] ${isOwn ? 'order-1' : 'order-2'} relative`}>
-                        {!isOwn && msg.sender && (
+                      {showAvatar && (
+                        <Avatar className="w-8 h-8 shrink-0 ml-2 order-3">
+                          <AvatarImage src={msg.sender?.profile_picture || undefined} />
+                          <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
+                        </Avatar>
+                      )}
+                      <div className={`max-w-[70%] ${isOwn ? 'order-1' : 'order-2'} relative`}>
+                        {!isOwn && msg.sender && selectedConversation.is_group && (
                           <p className="text-xs text-muted-foreground mb-1 text-right">
                             {msg.sender.full_name || msg.sender.username}
                           </p>
