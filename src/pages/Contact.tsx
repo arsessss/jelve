@@ -129,7 +129,7 @@ const Contact = () => {
 
                 <Button 
                   type="submit" 
-                  className="w-full gradient-primary text-primary-foreground font-bold gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full bg-primary text-primary-foreground font-bold gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   disabled={loading}
                 >
                   {loading ? (

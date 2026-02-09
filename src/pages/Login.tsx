@@ -92,7 +92,7 @@ const Login = () => {
         <div className="container mx-auto flex items-center justify-center min-h-[calc(100vh-200px)]">
           <Card className="w-full max-w-md p-8 animate-scale-in transition-all duration-500 hover:shadow-lg">
             <div className="text-center mb-8">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full gradient-primary flex items-center justify-center transition-transform duration-500 hover:scale-110">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-primary flex items-center justify-center transition-transform duration-500 hover:scale-110">
                 <Lock className="w-10 h-10 text-primary-foreground" />
               </div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent" dir="rtl">
@@ -156,7 +156,7 @@ const Login = () => {
 
               <Button 
                 type="submit" 
-                className="w-full gradient-primary text-primary-foreground font-bold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                className="w-full bg-primary text-primary-foreground font-bold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                 disabled={loading}
               >
                 {loading ? (

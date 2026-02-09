@@ -114,6 +114,7 @@ serve(async (req) => {
       custom_users: { read: ['admin', 'student'], write: ['admin', 'student'], delete: ['admin'] },
       user_roles: { read: ['admin'], write: ['admin'], delete: ['admin'] },
       akhbar: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
+      pish_sabtenam: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
     };
 
     const tablePerms = permissions[table];
