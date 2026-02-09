@@ -16,7 +16,7 @@ import { useAkhbar, renderFormattedText, Akhbar } from "@/hooks/use-akhbar";
 import { 
   LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, 
   BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, 
-  Edit2, Home, Newspaper, Image as ImageIcon
+  Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye
 } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
 
@@ -72,6 +72,15 @@ interface ContactMessage {
   created_at: string;
 }
 
+interface PishSabtenamData {
+  id: string;
+  unit_number: number;
+  title: string;
+  content: string;
+  image_url: string | null;
+  is_enabled: boolean;
+}
+
 const GRADE_OPTIONS = [
   { value: "7/1", label: "۷/۱" },
   { value: "7/2", label: "۷/۲" },
@@ -106,7 +115,7 @@ const JOZVEH_SUBJECT_OPTIONS = [
   { value: "tafakor", label: "تفکر" },
 ];
 
-type ActiveSection = "main" | "users" | "classes" | "jozveh" | "messages" | "chat" | "akhbar";
+type ActiveSection = "main" | "users" | "classes" | "jozveh" | "messages" | "chat" | "akhbar" | "roles" | "pish_sabtenam";
 
 const Admin = () => {
   const [loading, setLoading] = useState(false);
@@ -130,6 +139,7 @@ const Admin = () => {
   const [akhbarImage, setAkhbarImage] = useState<File | null>(null);
   const akhbarImageRef = useRef<HTMLInputElement>(null);
   const [akhbarLoading, setAkhbarLoading] = useState(false);
+  const [akhbarImagePreview, setAkhbarImagePreview] = useState<string | null>(null);
   
   // Student grades management
   const [selectedStudentForGrades, setSelectedStudentForGrades] = useState<Student | null>(null);
@@ -138,6 +148,20 @@ const Admin = () => {
   const [gradeDialogOpen, setGradeDialogOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<GradePeriod | null>(null);
   const [studentGrades, setStudentGrades] = useState<Record<string, string>>({});
+  
+  // Edit user state
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editUserForm, setEditUserForm] = useState({ full_name: "", username: "", password: "" });
+  const [editUserLoading, setEditUserLoading] = useState(false);
+  
+  // Pish Sabtenam state
+  const [pishSabtenamList, setPishSabtenamList] = useState<PishSabtenamData[]>([]);
+  const [editingPish, setEditingPish] = useState<PishSabtenamData | null>(null);
+  const [pishForm, setPishForm] = useState({ title: "", content: "" });
+  const [pishImage, setPishImage] = useState<File | null>(null);
+  const pishImageRef = useRef<HTMLInputElement>(null);
+  const [pishLoading, setPishLoading] = useState(false);
   
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -156,21 +180,13 @@ const Admin = () => {
     const { valid, session } = await customAuth.validateSession();
     
     if (!valid || !session) {
-      toast({
-        title: "نشست نامعتبر",
-        description: "لطفا دوباره وارد شوید",
-        variant: "destructive",
-      });
+      toast({ title: "نشست نامعتبر", description: "لطفا دوباره وارد شوید", variant: "destructive" });
       navigate("/login");
       return;
     }
 
     if (session.role !== "admin") {
-      toast({
-        title: "دسترسی غیرمجاز",
-        description: "شما دسترسی به این صفحه ندارید",
-        variant: "destructive",
-      });
+      toast({ title: "دسترسی غیرمجاز", description: "شما دسترسی به این صفحه ندارید", variant: "destructive" });
       navigate("/");
       return;
     }
@@ -182,6 +198,7 @@ const Admin = () => {
     fetchOnlineClasses();
     fetchJozveh();
     fetchGradePeriods();
+    fetchPishSabtenam();
   };
 
   const fetchMessages = async () => {
@@ -197,17 +214,11 @@ const Admin = () => {
   const fetchAdminUsers = async () => {
     const { data: roles, error: rolesError } = await secureApi.select<{ user_id: string }>('user_roles', { role: 'admin' });
     if (rolesError || !roles) return;
-
     const userIds = roles.map(r => r.user_id);
-    if (userIds.length === 0) {
-      setAdminUsers([]);
-      return;
-    }
-
+    if (userIds.length === 0) { setAdminUsers([]); return; }
     const { data: users, error } = await secureApi.select<AdminUser>('custom_users');
     if (!error && users) {
-      const admins = users.filter(u => userIds.includes(u.id));
-      setAdminUsers(admins);
+      setAdminUsers(users.filter(u => userIds.includes(u.id)));
     }
   };
 
@@ -226,102 +237,101 @@ const Admin = () => {
     if (!error && data) setGradePeriods(data);
   };
 
+  const fetchPishSabtenam = async () => {
+    const { data, error } = await secureApi.select<PishSabtenamData>('pish_sabtenam');
+    if (!error && data) setPishSabtenamList(data.sort((a, b) => a.unit_number - b.unit_number));
+  };
+
   const fetchStudentPeriodGrades = async (studentId: string, periodId: string) => {
-    const { data, error } = await secureApi.select<StudentPeriodGrade>('student_period_grades', { 
-      student_id: studentId, 
-      period_id: periodId 
-    });
+    const { data, error } = await secureApi.select<StudentPeriodGrade>('student_period_grades', { student_id: studentId, period_id: periodId });
     if (!error && data) {
       const grades: Record<string, string> = {};
-      data.forEach((g: StudentPeriodGrade) => {
-        grades[g.subject] = g.grade || "";
-      });
+      data.forEach((g: StudentPeriodGrade) => { grades[g.subject] = g.grade || ""; });
       setStudentGrades(grades);
     } else {
       setStudentGrades({});
     }
   };
 
-  const handleLogout = () => {
-    customAuth.logout();
-    navigate("/login");
-  };
+  const handleLogout = () => { customAuth.logout(); navigate("/login"); };
 
   const deleteMessage = async (messageId: string) => {
     if (!confirm("آیا از حذف این پیام اطمینان دارید؟")) return;
     const { error } = await secureApi.delete('contact_messages', messageId);
-    if (error) {
-      toast({ title: "خطا", description: "حذف پیام با مشکل مواجه شد", variant: "destructive" });
-    } else {
-      toast({ title: "حذف شد", description: "پیام با موفقیت حذف شد" });
-      fetchMessages();
-    }
+    if (error) { toast({ title: "خطا", description: "حذف پیام با مشکل مواجه شد", variant: "destructive" }); }
+    else { toast({ title: "حذف شد", description: "پیام با موفقیت حذف شد" }); fetchMessages(); }
   };
 
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      const { userId, error: authError } = await customAuth.createUser(
-        newStudent.username,
-        newStudent.password,
-        newStudent.name,
-        newStudent.role
-      );
-
-      if (authError) {
-        toast({ title: "خطا", description: authError, variant: "destructive" });
-        setLoading(false);
-        return;
-      }
-
+      const { userId, error: authError } = await customAuth.createUser(newStudent.username, newStudent.password, newStudent.name, newStudent.role);
+      if (authError) { toast({ title: "خطا", description: authError, variant: "destructive" }); setLoading(false); return; }
       if (userId) {
         if (newStudent.role === "student") {
-          const { error: studentError } = await secureApi.insert('students', {
-            user_id: userId,
-            full_name: newStudent.name,
-            grade: newStudent.grade,
-          });
-
-          if (studentError) {
-            toast({ title: "خطا", description: studentError, variant: "destructive" });
-            setLoading(false);
-            return;
-          }
+          const { error: studentError } = await secureApi.insert('students', { user_id: userId, full_name: newStudent.name, grade: newStudent.grade });
+          if (studentError) { toast({ title: "خطا", description: studentError, variant: "destructive" }); setLoading(false); return; }
         }
-
-        toast({
-          title: "موفقیت‌آمیز",
-          description: newStudent.role === "admin" ? "ادمین با موفقیت ایجاد شد" : "دانش‌آموز با موفقیت ایجاد شد",
-        });
-
+        toast({ title: "موفقیت‌آمیز", description: newStudent.role === "admin" ? "ادمین با موفقیت ایجاد شد" : "دانش‌آموز با موفقیت ایجاد شد" });
         setNewStudent({ name: "", username: "", password: "", grade: "7/1", role: "student" });
-        if (newStudent.role === "student") {
-          fetchStudents();
-        } else {
-          fetchAdminUsers();
-        }
+        if (newStudent.role === "student") fetchStudents(); else fetchAdminUsers();
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "ایجاد کاربر با مشکل مواجه شد";
       toast({ title: "خطا", description: errorMessage, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const deleteStudent = async (studentId: string, userId: string) => {
     if (!confirm("آیا از حذف این دانش‌آموز اطمینان دارید؟")) return;
-
     try {
       await secureApi.delete('students', studentId);
       await secureApi.delete('custom_users', userId);
       toast({ title: "حذف شد", description: "دانش‌آموز با موفقیت حذف شد" });
       fetchStudents();
+    } catch { toast({ title: "خطا", description: "حذف دانش‌آموز با مشکل مواجه شد", variant: "destructive" }); }
+  };
+
+  const openEditUserDialog = (student: Student) => {
+    setEditingStudent(student);
+    setEditUserForm({ full_name: student.full_name, username: "", password: "" });
+    setEditUserDialogOpen(true);
+  };
+
+  const handleEditUser = async () => {
+    if (!editingStudent) return;
+    setEditUserLoading(true);
+    try {
+      // Update full_name in students table
+      if (editUserForm.full_name && editUserForm.full_name !== editingStudent.full_name) {
+        await secureApi.update('students', editingStudent.id, { full_name: editUserForm.full_name });
+        await secureApi.update('custom_users', editingStudent.user_id, { full_name: editUserForm.full_name });
+      }
+      // Update username
+      if (editUserForm.username.trim()) {
+        await secureApi.update('custom_users', editingStudent.user_id, { username: editUserForm.username });
+      }
+      // Update password via auth edge function
+      if (editUserForm.password.trim()) {
+        const session = customAuth.getSession();
+        if (session) {
+          const { data: result, error } = await supabase.functions.invoke('auth-change-password', {
+            body: { token: session.token, target_user_id: editingStudent.user_id, new_password: editUserForm.password },
+          });
+          if (error || result?.error) {
+            toast({ title: "خطا", description: result?.error || "تغییر رمز عبور ناموفق بود", variant: "destructive" });
+            setEditUserLoading(false);
+            return;
+          }
+        }
+      }
+      toast({ title: "موفق", description: "اطلاعات کاربر ویرایش شد" });
+      setEditUserDialogOpen(false);
+      fetchStudents();
     } catch {
-      toast({ title: "خطا", description: "حذف دانش‌آموز با مشکل مواجه شد", variant: "destructive" });
-    }
+      toast({ title: "خطا", description: "ویرایش کاربر ناموفق بود", variant: "destructive" });
+    } finally { setEditUserLoading(false); }
   };
 
   const openStudentGradesDialog = (student: Student) => {
@@ -335,40 +345,20 @@ const Admin = () => {
       toast({ title: "خطا", description: "عنوان دوره الزامی است", variant: "destructive" });
       return;
     }
-
     setLoading(true);
-    const { error } = await secureApi.insert('grade_periods', {
-      title: newPeriodTitle,
-      grade: selectedStudentForGrades.grade,
-    });
-
-    if (error) {
-      toast({ title: "خطا", description: error, variant: "destructive" });
-    } else {
-      toast({ title: "موفق", description: "دوره نمره جدید ایجاد شد" });
-      setNewPeriodTitle("");
-      fetchGradePeriods();
-    }
+    const { error } = await secureApi.insert('grade_periods', { title: newPeriodTitle, grade: selectedStudentForGrades.grade });
+    if (error) { toast({ title: "خطا", description: error, variant: "destructive" }); }
+    else { toast({ title: "موفق", description: "دوره نمره جدید ایجاد شد" }); setNewPeriodTitle(""); fetchGradePeriods(); }
     setLoading(false);
   };
 
   const deleteGradePeriod = async (periodId: string) => {
     if (!confirm("آیا از حذف این دوره و تمام نمرات مرتبط اطمینان دارید؟")) return;
-
     const { data: grades } = await secureApi.select<StudentPeriodGrade>('student_period_grades', { period_id: periodId });
-    if (grades) {
-      for (const g of grades) {
-        await secureApi.delete('student_period_grades', g.id);
-      }
-    }
-
+    if (grades) { for (const g of grades) { await secureApi.delete('student_period_grades', g.id); } }
     const { error } = await secureApi.delete('grade_periods', periodId);
-    if (error) {
-      toast({ title: "خطا", description: error, variant: "destructive" });
-    } else {
-      toast({ title: "حذف شد", description: "دوره نمره حذف شد" });
-      fetchGradePeriods();
-    }
+    if (error) { toast({ title: "خطا", description: error, variant: "destructive" }); }
+    else { toast({ title: "حذف شد", description: "دوره نمره حذف شد" }); fetchGradePeriods(); }
   };
 
   const openGradeDialog = async (period: GradePeriod) => {
@@ -382,99 +372,52 @@ const Admin = () => {
   const saveStudentPeriodGrades = async () => {
     if (!selectedStudentForGrades || !selectedPeriod) return;
     setLoading(true);
-
     try {
       for (const subject of SUBJECT_OPTIONS) {
         const gradeValue = studentGrades[subject.value] || "";
-        
-        const { error } = await secureApi.upsert('student_period_grades', {
-          student_id: selectedStudentForGrades.id,
-          period_id: selectedPeriod.id,
-          subject: subject.value,
-          grade: gradeValue || null,
-        });
-
+        const { error } = await secureApi.upsert('student_period_grades', { student_id: selectedStudentForGrades.id, period_id: selectedPeriod.id, subject: subject.value, grade: gradeValue || null });
         if (error) throw new Error(error);
       }
-
       toast({ title: "موفق", description: "نمرات ذخیره شد" });
       setGradeDialogOpen(false);
-    } catch {
-      toast({ title: "خطا", description: "ذخیره نمرات با مشکل مواجه شد", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast({ title: "خطا", description: "ذخیره نمرات با مشکل مواجه شد", variant: "destructive" }); }
+    finally { setLoading(false); }
   };
 
   const createOnlineClass = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      const { error } = await secureApi.insert('online_classes', {
-        grade: newClass.grade,
-        title: newClass.title,
-        link: newClass.link,
-      });
-
+      const { error } = await secureApi.insert('online_classes', { grade: newClass.grade, title: newClass.title, link: newClass.link });
       if (error) throw new Error(error);
-
       toast({ title: "موفقیت‌آمیز", description: "کلاس آنلاین با موفقیت ایجاد شد" });
       setNewClass({ grade: "7/1", title: "", link: "" });
       fetchOnlineClasses();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "ایجاد کلاس با مشکل مواجه شد";
       toast({ title: "خطا", description: errorMessage, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const deleteOnlineClass = async (classId: string) => {
     if (!confirm("آیا از حذف این کلاس اطمینان دارید؟")) return;
-
     const { error } = await secureApi.delete('online_classes', classId);
-    if (error) {
-      toast({ title: "خطا", description: "حذف کلاس با مشکل مواجه شد", variant: "destructive" });
-    } else {
-      toast({ title: "حذف شد", description: "کلاس با موفقیت حذف شد" });
-      fetchOnlineClasses();
-    }
+    if (error) { toast({ title: "خطا", description: "حذف کلاس با مشکل مواجه شد", variant: "destructive" }); }
+    else { toast({ title: "حذف شد", description: "کلاس با موفقیت حذف شد" }); fetchOnlineClasses(); }
   };
 
   const createJozveh = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!jozvehFile) {
-      toast({ title: "خطا", description: "لطفاً یک فایل انتخاب کنید", variant: "destructive" });
-      return;
-    }
-    
+    if (!jozvehFile) { toast({ title: "خطا", description: "لطفاً یک فایل انتخاب کنید", variant: "destructive" }); return; }
     setLoading(true);
-
     try {
       const fileExt = jozvehFile.name.split(".").pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from("jozveh-files")
-        .upload(fileName, jozvehFile);
-
+      const { error: uploadError } = await supabase.storage.from("jozveh-files").upload(fileName, jozvehFile);
       if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from("jozveh-files")
-        .getPublicUrl(fileName);
-
-      const { error } = await secureApi.insert('jozveh', {
-        grade: newJozveh.grade,
-        subject: newJozveh.subject,
-        title: newJozveh.title,
-        link: urlData.publicUrl,
-        file_url: urlData.publicUrl,
-      });
-
+      const { data: urlData } = supabase.storage.from("jozveh-files").getPublicUrl(fileName);
+      const { error } = await secureApi.insert('jozveh', { grade: newJozveh.grade, subject: newJozveh.subject, title: newJozveh.title, link: urlData.publicUrl, file_url: urlData.publicUrl });
       if (error) throw new Error(error);
-
       toast({ title: "موفقیت‌آمیز", description: "جزوه با موفقیت ایجاد شد" });
       setNewJozveh({ grade: "7/1", subject: "olom", title: "" });
       setJozvehFile(null);
@@ -483,21 +426,14 @@ const Admin = () => {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "ایجاد جزوه با مشکل مواجه شد";
       toast({ title: "خطا", description: errorMessage, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const deleteJozveh = async (jozvehId: string) => {
     if (!confirm("آیا از حذف این جزوه اطمینان دارید؟")) return;
-
     const { error } = await secureApi.delete('jozveh', jozvehId);
-    if (error) {
-      toast({ title: "خطا", description: "حذف جزوه با مشکل مواجه شد", variant: "destructive" });
-    } else {
-      toast({ title: "حذف شد", description: "جزوه با موفقیت حذف شد" });
-      fetchJozveh();
-    }
+    if (error) { toast({ title: "خطا", description: "حذف جزوه با مشکل مواجه شد", variant: "destructive" }); }
+    else { toast({ title: "حذف شد", description: "جزوه با موفقیت حذف شد" }); fetchJozveh(); }
   };
 
   const getGradeLabel = (grade: string) => {
@@ -521,29 +457,16 @@ const Admin = () => {
       toast({ title: "خطا", description: "عنوان و متن خبر الزامی است", variant: "destructive" });
       return;
     }
-    
     setAkhbarLoading(true);
-    
     let imageUrl: string | null = null;
-    if (akhbarImage) {
-      imageUrl = await uploadImage(akhbarImage);
-    }
-    
-    const success = await createAkhbar(
-      newAkhbar.title,
-      newAkhbar.content,
-      imageUrl,
-      newAkhbar.targetGrades,
-      newAkhbar.isPublished,
-      currentUserId
-    );
-    
+    if (akhbarImage) { imageUrl = await uploadImage(akhbarImage); }
+    const success = await createAkhbar(newAkhbar.title, newAkhbar.content, imageUrl, newAkhbar.targetGrades, newAkhbar.isPublished, currentUserId);
     if (success) {
       setNewAkhbar({ title: "", content: "", targetGrades: [], isPublished: true });
       setAkhbarImage(null);
+      setAkhbarImagePreview(null);
       if (akhbarImageRef.current) akhbarImageRef.current.value = "";
     }
-    
     setAkhbarLoading(false);
   };
 
@@ -555,10 +478,51 @@ const Admin = () => {
   const toggleGradeInAkhbar = (grade: string) => {
     setNewAkhbar(prev => ({
       ...prev,
-      targetGrades: prev.targetGrades.includes(grade)
-        ? prev.targetGrades.filter(g => g !== grade)
-        : [...prev.targetGrades, grade]
+      targetGrades: prev.targetGrades.includes(grade) ? prev.targetGrades.filter(g => g !== grade) : [...prev.targetGrades, grade]
     }));
+  };
+
+  const handleAkhbarImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setAkhbarImage(file);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAkhbarImagePreview(url);
+    } else {
+      setAkhbarImagePreview(null);
+    }
+  };
+
+  const handleEditPish = (pish: PishSabtenamData) => {
+    setEditingPish(pish);
+    setPishForm({ title: pish.title, content: pish.content });
+    setPishImage(null);
+  };
+
+  const handleSavePish = async () => {
+    if (!editingPish) return;
+    setPishLoading(true);
+    try {
+      let imageUrl = editingPish.image_url;
+      if (pishImage) {
+        const fileExt = pishImage.name.split(".").pop();
+        const fileName = `pish-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(fileName, pishImage);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
+        imageUrl = urlData.publicUrl;
+      }
+      await secureApi.update('pish_sabtenam', editingPish.id, { title: pishForm.title, content: pishForm.content, image_url: imageUrl });
+      toast({ title: "موفق", description: "اطلاعات ذخیره شد" });
+      setEditingPish(null);
+      fetchPishSabtenam();
+    } catch { toast({ title: "خطا", description: "ذخیره ناموفق بود", variant: "destructive" }); }
+    finally { setPishLoading(false); }
+  };
+
+  const togglePishEnabled = async (pish: PishSabtenamData) => {
+    await secureApi.update('pish_sabtenam', pish.id, { is_enabled: !pish.is_enabled });
+    fetchPishSabtenam();
   };
 
   const sidebarItems = [
@@ -567,6 +531,8 @@ const Admin = () => {
     { id: "classes" as ActiveSection, icon: Video, label: "کلاس‌ها" },
     { id: "jozveh" as ActiveSection, icon: FileText, label: "جزوه‌ها" },
     { id: "akhbar" as ActiveSection, icon: Newspaper, label: "اخبار" },
+    { id: "pish_sabtenam" as ActiveSection, icon: ClipboardList, label: "پیش ثبت‌نام" },
+    { id: "roles" as ActiveSection, icon: Shield, label: "نقش‌ها" },
     { id: "messages" as ActiveSection, icon: MessageSquare, label: "پیام‌ها" },
     { id: "chat" as ActiveSection, icon: Send, label: "چت" },
   ];
@@ -578,28 +544,28 @@ const Admin = () => {
       <main className="pt-24 pb-12">
         <div className="flex flex-col lg:flex-row min-h-[calc(100vh-6rem)]">
           {/* Sidebar Navigation */}
-          <aside className="w-full lg:w-64 bg-card border-b lg:border-b-0 lg:border-l border-border p-4 lg:p-6 lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)]" dir="rtl">
-            <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
+          <aside className="w-full lg:w-64 bg-card border-b lg:border-b-0 lg:border-l border-border p-3 lg:p-6 lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)]" dir="rtl">
+            <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 scrollbar-hide">
               {sidebarItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setActiveSection(item.id)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 whitespace-nowrap ${
+                  className={`flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg transition-all duration-300 whitespace-nowrap text-sm lg:text-base ${
                     activeSection === item.id
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted/50 hover:bg-muted text-foreground"
                   }`}
                 >
-                  <item.icon className="w-5 h-5 shrink-0" />
+                  <item.icon className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
                   <span className="font-medium">{item.label}</span>
                 </button>
               ))}
               
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground text-destructive transition-all duration-300 whitespace-nowrap lg:mt-auto"
+                className="flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground text-destructive transition-all duration-300 whitespace-nowrap lg:mt-auto text-sm lg:text-base"
               >
-                <LogOut className="w-5 h-5 shrink-0" />
+                <LogOut className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
                 <span className="font-medium">خروج</span>
               </button>
             </div>
@@ -611,58 +577,52 @@ const Admin = () => {
             {activeSection === "main" && (
               <div className="space-y-6 animate-fade-in">
                 <h1 className="text-2xl font-bold">پنل مدیریت</h1>
-                
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="p-6 border-2">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <GraduationCap className="w-6 h-6 text-primary" />
+                  <Card className="p-4 lg:p-6 border-2">
+                    <div className="flex items-center gap-3 lg:gap-4">
+                      <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <GraduationCap className="w-5 h-5 lg:w-6 lg:h-6 text-primary" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{students.length}</p>
-                        <p className="text-sm text-muted-foreground">دانش‌آموز</p>
+                        <p className="text-xl lg:text-2xl font-bold">{students.length}</p>
+                        <p className="text-xs lg:text-sm text-muted-foreground">دانش‌آموز</p>
                       </div>
                     </div>
                   </Card>
-                  
-                  <Card className="p-6 border-2">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-                        <ShieldCheck className="w-6 h-6 text-accent" />
+                  <Card className="p-4 lg:p-6 border-2">
+                    <div className="flex items-center gap-3 lg:gap-4">
+                      <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                        <ShieldCheck className="w-5 h-5 lg:w-6 lg:h-6 text-accent" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{adminUsers.length}</p>
-                        <p className="text-sm text-muted-foreground">ادمین</p>
+                        <p className="text-xl lg:text-2xl font-bold">{adminUsers.length}</p>
+                        <p className="text-xs lg:text-sm text-muted-foreground">ادمین</p>
                       </div>
                     </div>
                   </Card>
-                  
-                  <Card className="p-6 border-2">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Video className="w-6 h-6 text-primary" />
+                  <Card className="p-4 lg:p-6 border-2">
+                    <div className="flex items-center gap-3 lg:gap-4">
+                      <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Video className="w-5 h-5 lg:w-6 lg:h-6 text-primary" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{onlineClasses.length}</p>
-                        <p className="text-sm text-muted-foreground">کلاس</p>
+                        <p className="text-xl lg:text-2xl font-bold">{onlineClasses.length}</p>
+                        <p className="text-xs lg:text-sm text-muted-foreground">کلاس</p>
                       </div>
                     </div>
                   </Card>
-                  
-                  <Card className="p-6 border-2">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-                        <MessageSquare className="w-6 h-6 text-accent" />
+                  <Card className="p-4 lg:p-6 border-2">
+                    <div className="flex items-center gap-3 lg:gap-4">
+                      <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                        <MessageSquare className="w-5 h-5 lg:w-6 lg:h-6 text-accent" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{messages.length}</p>
-                        <p className="text-sm text-muted-foreground">پیام</p>
+                        <p className="text-xl lg:text-2xl font-bold">{messages.length}</p>
+                        <p className="text-xs lg:text-sm text-muted-foreground">پیام</p>
                       </div>
                     </div>
                   </Card>
                 </div>
-
-                {/* Recent Messages */}
                 <Card className="p-6 border-2">
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5" />
@@ -675,15 +635,11 @@ const Admin = () => {
                           <p className="font-bold">{msg.name}</p>
                           <p className="text-sm text-muted-foreground line-clamp-1">{msg.message}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(msg.created_at).toLocaleDateString('fa-IR')}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleDateString('fa-IR')}</span>
                       </div>
                     </div>
                   ))}
-                  {messages.length === 0 && (
-                    <p className="text-center text-muted-foreground py-4">هیچ پیامی وجود ندارد</p>
-                  )}
+                  {messages.length === 0 && <p className="text-center text-muted-foreground py-4">هیچ پیامی وجود ندارد</p>}
                 </Card>
               </div>
             )}
@@ -695,55 +651,23 @@ const Admin = () => {
                   <Users className="w-8 h-8 text-primary" />
                   مدیریت کاربران
                 </h1>
-
-                {/* Create User Form */}
                 <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <UserPlus className="w-5 h-5" />
-                    افزودن کاربر جدید
-                  </h3>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><UserPlus className="w-5 h-5" /> افزودن کاربر جدید</h3>
                   <form onSubmit={createUser} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <Select value={newStudent.role} onValueChange={(value: "student" | "admin") => setNewStudent({ ...newStudent, role: value })}>
-                      <SelectTrigger className="text-right">
-                        <SelectValue placeholder="نوع کاربر" />
-                      </SelectTrigger>
+                      <SelectTrigger className="text-right"><SelectValue placeholder="نوع کاربر" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="student">دانش‌آموز</SelectItem>
                         <SelectItem value="admin">ادمین</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input
-                      placeholder="نام و نام خانوادگی"
-                      value={newStudent.name}
-                      onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                      required
-                      className="text-right"
-                    />
-                    <Input
-                      placeholder="نام کاربری"
-                      value={newStudent.username}
-                      onChange={(e) => setNewStudent({ ...newStudent, username: e.target.value })}
-                      required
-                      className="text-right"
-                    />
-                    <Input
-                      placeholder="رمز عبور"
-                      type="password"
-                      value={newStudent.password}
-                      onChange={(e) => setNewStudent({ ...newStudent, password: e.target.value })}
-                      required
-                      className="text-right"
-                    />
+                    <Input placeholder="نام و نام خانوادگی" value={newStudent.name} onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })} required className="text-right" />
+                    <Input placeholder="نام کاربری" value={newStudent.username} onChange={(e) => setNewStudent({ ...newStudent, username: e.target.value })} required className="text-right" />
+                    <Input placeholder="رمز عبور" type="password" value={newStudent.password} onChange={(e) => setNewStudent({ ...newStudent, password: e.target.value })} required className="text-right" />
                     {newStudent.role === "student" && (
                       <Select value={newStudent.grade} onValueChange={(value) => setNewStudent({ ...newStudent, grade: value })}>
-                        <SelectTrigger className="text-right">
-                          <SelectValue placeholder="پایه تحصیلی" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {GRADE_OPTIONS.map(g => (
-                            <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                          ))}
-                        </SelectContent>
+                        <SelectTrigger className="text-right"><SelectValue placeholder="پایه تحصیلی" /></SelectTrigger>
+                        <SelectContent>{GRADE_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent>
                       </Select>
                     )}
                     <Button type="submit" disabled={loading} className={newStudent.role === "student" ? "" : "lg:col-span-2"}>
@@ -751,20 +675,13 @@ const Admin = () => {
                     </Button>
                   </form>
                 </Card>
-
-                {/* Admin Users List */}
                 <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5" />
-                    لیست ادمین‌ها
-                  </h3>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><ShieldCheck className="w-5 h-5" /> لیست ادمین‌ها</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {adminUsers.map((admin) => (
                       <div key={admin.id} className="p-4 bg-muted/50 rounded-lg border border-border">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <ShieldCheck className="w-5 h-5 text-primary" />
-                          </div>
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><ShieldCheck className="w-5 h-5 text-primary" /></div>
                           <div>
                             <p className="font-bold">{admin.full_name || admin.username}</p>
                             <p className="text-sm text-muted-foreground">@{admin.username}</p>
@@ -772,54 +689,33 @@ const Admin = () => {
                         </div>
                       </div>
                     ))}
-                    {adminUsers.length === 0 && (
-                      <p className="text-center text-muted-foreground py-4 col-span-full">هیچ ادمینی وجود ندارد</p>
-                    )}
+                    {adminUsers.length === 0 && <p className="text-center text-muted-foreground py-4 col-span-full">هیچ ادمینی وجود ندارد</p>}
                   </div>
                 </Card>
-
-                {/* Students List */}
                 <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <GraduationCap className="w-5 h-5" />
-                    لیست دانش‌آموزان
-                  </h3>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><GraduationCap className="w-5 h-5" /> لیست دانش‌آموزان</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {students.map((student) => (
                       <div key={student.id} className="p-4 bg-muted/50 rounded-lg border border-border">
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                              <GraduationCap className="w-5 h-5 text-accent" />
-                            </div>
+                            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center"><GraduationCap className="w-5 h-5 text-accent" /></div>
                             <div>
                               <p className="font-bold">{student.full_name}</p>
                               <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(student.grade)}</p>
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openStudentGradesDialog(student)}
-                            title="مدیریت نمرات"
-                          >
-                            <Settings className="w-4 h-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEditUserDialog(student)} title="ویرایش"><Edit2 className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => openStudentGradesDialog(student)} title="نمرات"><Settings className="w-4 h-4" /></Button>
+                          </div>
                         </div>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => deleteStudent(student.id, student.user_id)}
-                          className="w-full gap-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          حذف
+                        <Button variant="destructive" size="sm" onClick={() => deleteStudent(student.id, student.user_id)} className="w-full gap-1">
+                          <Trash2 className="w-4 h-4" /> حذف
                         </Button>
                       </div>
                     ))}
-                    {students.length === 0 && (
-                      <p className="text-center text-muted-foreground py-4 col-span-full">هیچ دانش‌آموزی وجود ندارد</p>
-                    )}
+                    {students.length === 0 && <p className="text-center text-muted-foreground py-4 col-span-full">هیچ دانش‌آموزی وجود ندارد</p>}
                   </div>
                 </Card>
               </div>
@@ -828,48 +724,19 @@ const Admin = () => {
             {/* Classes Section */}
             {activeSection === "classes" && (
               <div className="space-y-6 animate-fade-in">
-                <h1 className="text-2xl font-bold flex items-center gap-3">
-                  <Video className="w-8 h-8 text-primary" />
-                  مدیریت کلاس‌ها
-                </h1>
-
+                <h1 className="text-2xl font-bold flex items-center gap-3"><Video className="w-8 h-8 text-primary" /> مدیریت کلاس‌ها</h1>
                 <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <Plus className="w-5 h-5" />
-                    افزودن کلاس آنلاین
-                  </h3>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Plus className="w-5 h-5" /> افزودن کلاس آنلاین</h3>
                   <form onSubmit={createOnlineClass} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      placeholder="عنوان کلاس"
-                      value={newClass.title}
-                      onChange={(e) => setNewClass({ ...newClass, title: e.target.value })}
-                      required
-                      className="text-right"
-                    />
-                    <Input
-                      placeholder="لینک کلاس"
-                      value={newClass.link}
-                      onChange={(e) => setNewClass({ ...newClass, link: e.target.value })}
-                      required
-                      className="text-right"
-                      dir="ltr"
-                    />
+                    <Input placeholder="عنوان کلاس" value={newClass.title} onChange={(e) => setNewClass({ ...newClass, title: e.target.value })} required className="text-right" />
+                    <Input placeholder="لینک کلاس" value={newClass.link} onChange={(e) => setNewClass({ ...newClass, link: e.target.value })} required className="text-right" dir="ltr" />
                     <Select value={newClass.grade} onValueChange={(value) => setNewClass({ ...newClass, grade: value })}>
-                      <SelectTrigger className="text-right">
-                        <SelectValue placeholder="پایه تحصیلی" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GRADE_OPTIONS.map(g => (
-                          <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                        ))}
-                      </SelectContent>
+                      <SelectTrigger className="text-right"><SelectValue placeholder="پایه تحصیلی" /></SelectTrigger>
+                      <SelectContent>{GRADE_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Button type="submit" disabled={loading}>
-                      ایجاد کلاس
-                    </Button>
+                    <Button type="submit" disabled={loading}>ایجاد کلاس</Button>
                   </form>
                 </Card>
-
                 <Card className="p-6 border-2">
                   <h3 className="text-lg font-bold mb-4">لیست کلاس‌های آنلاین</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -879,19 +746,10 @@ const Admin = () => {
                           <p className="font-bold truncate">{cls.title}</p>
                           <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(cls.grade)}</p>
                         </div>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => deleteOnlineClass(cls.id)}
-                          className="shrink-0 mr-3"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <Button variant="destructive" size="icon" onClick={() => deleteOnlineClass(cls.id)} className="shrink-0 mr-3"><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     ))}
-                    {onlineClasses.length === 0 && (
-                      <p className="text-center text-muted-foreground py-4 col-span-full">هیچ کلاسی وجود ندارد</p>
-                    )}
+                    {onlineClasses.length === 0 && <p className="text-center text-muted-foreground py-4 col-span-full">هیچ کلاسی وجود ندارد</p>}
                   </div>
                 </Card>
               </div>
@@ -900,68 +758,28 @@ const Admin = () => {
             {/* Jozveh Section */}
             {activeSection === "jozveh" && (
               <div className="space-y-6 animate-fade-in">
-                <h1 className="text-2xl font-bold flex items-center gap-3">
-                  <FileText className="w-8 h-8 text-primary" />
-                  مدیریت جزوه‌ها
-                </h1>
-
+                <h1 className="text-2xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-primary" /> مدیریت جزوه‌ها</h1>
                 <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <Plus className="w-5 h-5" />
-                    افزودن جزوه جدید
-                  </h3>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Plus className="w-5 h-5" /> افزودن جزوه جدید</h3>
                   <form onSubmit={createJozveh} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      placeholder="عنوان جزوه"
-                      value={newJozveh.title}
-                      onChange={(e) => setNewJozveh({ ...newJozveh, title: e.target.value })}
-                      required
-                      className="text-right"
-                    />
+                    <Input placeholder="عنوان جزوه" value={newJozveh.title} onChange={(e) => setNewJozveh({ ...newJozveh, title: e.target.value })} required className="text-right" />
                     <div className="relative">
-                      <input
-                        type="file"
-                        ref={jozvehFileRef}
-                        onChange={(e) => setJozvehFile(e.target.files?.[0] || null)}
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.png,.jpeg"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => jozvehFileRef.current?.click()}
-                        className="w-full gap-2 justify-start"
-                      >
-                        <Upload className="w-4 h-4" />
-                        {jozvehFile ? jozvehFile.name : "انتخاب فایل"}
+                      <input type="file" ref={jozvehFileRef} onChange={(e) => setJozvehFile(e.target.files?.[0] || null)} className="hidden" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.png,.jpeg" />
+                      <Button type="button" variant="outline" onClick={() => jozvehFileRef.current?.click()} className="w-full gap-2 justify-start">
+                        <Upload className="w-4 h-4" /> {jozvehFile ? jozvehFile.name : "انتخاب فایل"}
                       </Button>
                     </div>
                     <Select value={newJozveh.subject} onValueChange={(value) => setNewJozveh({ ...newJozveh, subject: value })}>
-                      <SelectTrigger className="text-right">
-                        <SelectValue placeholder="موضوع" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {JOZVEH_SUBJECT_OPTIONS.map(s => (
-                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
+                      <SelectTrigger className="text-right"><SelectValue placeholder="موضوع" /></SelectTrigger>
+                      <SelectContent>{JOZVEH_SUBJECT_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
                     </Select>
                     <Select value={newJozveh.grade} onValueChange={(value) => setNewJozveh({ ...newJozveh, grade: value })}>
-                      <SelectTrigger className="text-right">
-                        <SelectValue placeholder="پایه تحصیلی" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GRADE_OPTIONS.map(g => (
-                          <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                        ))}
-                      </SelectContent>
+                      <SelectTrigger className="text-right"><SelectValue placeholder="پایه تحصیلی" /></SelectTrigger>
+                      <SelectContent>{GRADE_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Button type="submit" disabled={loading || !jozvehFile} className="sm:col-span-2">
-                      {loading ? "در حال آپلود..." : "ایجاد جزوه"}
-                    </Button>
+                    <Button type="submit" disabled={loading || !jozvehFile} className="sm:col-span-2">{loading ? "در حال آپلود..." : "ایجاد جزوه"}</Button>
                   </form>
                 </Card>
-
                 <Card className="p-6 border-2">
                   <h3 className="text-lg font-bold mb-4">لیست جزوه‌ها</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -971,24 +789,13 @@ const Admin = () => {
                           <FileText className="w-8 h-8 text-muted-foreground shrink-0" />
                           <div className="min-w-0">
                             <p className="font-bold truncate">{jozveh.title}</p>
-                            <p className="text-sm text-muted-foreground">
-                              پایه: {getGradeLabel(jozveh.grade)} | {getSubjectLabel(jozveh.subject)}
-                            </p>
+                            <p className="text-sm text-muted-foreground">پایه: {getGradeLabel(jozveh.grade)} | {getSubjectLabel(jozveh.subject)}</p>
                           </div>
                         </div>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => deleteJozveh(jozveh.id)}
-                          className="shrink-0 mr-3"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <Button variant="destructive" size="icon" onClick={() => deleteJozveh(jozveh.id)} className="shrink-0 mr-3"><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     ))}
-                    {jozvehList.length === 0 && (
-                      <p className="text-center text-muted-foreground py-4 col-span-full">هیچ جزوه‌ای وجود ندارد</p>
-                    )}
+                    {jozvehList.length === 0 && <p className="text-center text-muted-foreground py-4 col-span-full">هیچ جزوه‌ای وجود ندارد</p>}
                   </div>
                 </Card>
               </div>
@@ -997,81 +804,40 @@ const Admin = () => {
             {/* Akhbar Section */}
             {activeSection === "akhbar" && (
               <div className="space-y-6 animate-fade-in">
-                <h1 className="text-2xl font-bold flex items-center gap-3">
-                  <Newspaper className="w-8 h-8 text-primary" />
-                  مدیریت اخبار
-                </h1>
-
+                <h1 className="text-2xl font-bold flex items-center gap-3"><Newspaper className="w-8 h-8 text-primary" /> مدیریت اخبار</h1>
                 <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <Plus className="w-5 h-5" />
-                    افزودن خبر جدید
-                  </h3>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Plus className="w-5 h-5" /> افزودن خبر جدید</h3>
                   <form onSubmit={handleCreateAkhbar} className="space-y-4">
-                    <Input
-                      placeholder="عنوان خبر"
-                      value={newAkhbar.title}
-                      onChange={(e) => setNewAkhbar({ ...newAkhbar, title: e.target.value })}
-                      required
-                      className="text-right"
-                    />
-                    <Textarea
-                      placeholder="متن خبر (از ** برای بولد کردن استفاده کنید)"
-                      value={newAkhbar.content}
-                      onChange={(e) => setNewAkhbar({ ...newAkhbar, content: e.target.value })}
-                      required
-                      className="text-right min-h-[120px]"
-                    />
+                    <Input placeholder="عنوان خبر" value={newAkhbar.title} onChange={(e) => setNewAkhbar({ ...newAkhbar, title: e.target.value })} required className="text-right" />
+                    <Textarea placeholder="متن خبر (از ** برای بولد کردن استفاده کنید)" value={newAkhbar.content} onChange={(e) => setNewAkhbar({ ...newAkhbar, content: e.target.value })} required className="text-right min-h-[120px]" />
                     <div className="space-y-2">
                       <label className="text-sm font-medium">تصویر (اختیاری)</label>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          ref={akhbarImageRef}
-                          onChange={(e) => setAkhbarImage(e.target.files?.[0] || null)}
-                          className="hidden"
-                          accept="image/*"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => akhbarImageRef.current?.click()}
-                          className="w-full gap-2 justify-start"
-                        >
-                          <ImageIcon className="w-4 h-4" />
-                          {akhbarImage ? akhbarImage.name : "انتخاب تصویر"}
-                        </Button>
-                      </div>
+                      <input type="file" ref={akhbarImageRef} onChange={handleAkhbarImageSelect} className="hidden" accept="image/*" />
+                      <Button type="button" variant="outline" onClick={() => akhbarImageRef.current?.click()} className="w-full gap-2 justify-start">
+                        <ImageIcon className="w-4 h-4" /> {akhbarImage ? akhbarImage.name : "انتخاب تصویر"}
+                      </Button>
+                      {akhbarImagePreview && (
+                        <div className="mt-2 border rounded-lg p-2">
+                          <p className="text-xs text-muted-foreground mb-2">پیش‌نمایش تصویر:</p>
+                          <img src={akhbarImagePreview} alt="preview" className="w-full max-h-64 object-contain rounded" />
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">پایه‌های هدف (خالی = همه)</label>
                       <div className="flex flex-wrap gap-2">
                         {GRADE_OPTIONS.map(g => (
-                          <Button
-                            key={g.value}
-                            type="button"
-                            variant={newAkhbar.targetGrades.includes(g.value) ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => toggleGradeInAkhbar(g.value)}
-                          >
-                            {g.label}
-                          </Button>
+                          <Button key={g.value} type="button" variant={newAkhbar.targetGrades.includes(g.value) ? "default" : "outline"} size="sm" onClick={() => toggleGradeInAkhbar(g.value)}>{g.label}</Button>
                         ))}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Switch
-                        checked={newAkhbar.isPublished}
-                        onCheckedChange={(checked) => setNewAkhbar({ ...newAkhbar, isPublished: checked })}
-                      />
+                      <Switch checked={newAkhbar.isPublished} onCheckedChange={(checked) => setNewAkhbar({ ...newAkhbar, isPublished: checked })} />
                       <label className="text-sm">منتشر شود</label>
                     </div>
-                    <Button type="submit" disabled={akhbarLoading} className="w-full">
-                      {akhbarLoading ? "در حال ایجاد..." : "ایجاد خبر"}
-                    </Button>
+                    <Button type="submit" disabled={akhbarLoading} className="w-full">{akhbarLoading ? "در حال ایجاد..." : "ایجاد خبر"}</Button>
                   </form>
                 </Card>
-
                 <Card className="p-6 border-2">
                   <h3 className="text-lg font-bold mb-4">لیست اخبار</h3>
                   <div className="space-y-4">
@@ -1089,24 +855,10 @@ const Admin = () => {
                                 {item.target_grades.length > 0 && ` | پایه‌ها: ${item.target_grades.join(', ')}`}
                               </p>
                             </div>
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              onClick={() => handleDeleteAkhbar(item.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <Button variant="destructive" size="icon" onClick={() => handleDeleteAkhbar(item.id)}><Trash2 className="w-4 h-4" /></Button>
                           </div>
-                          {item.image_url && (
-                            <img 
-                              src={item.image_url} 
-                              alt={item.title} 
-                              className="w-full max-h-48 object-cover rounded-lg mb-3"
-                            />
-                          )}
-                          <p className="text-sm whitespace-pre-wrap">
-                            {renderFormattedText(item.content)}
-                          </p>
+                          {item.image_url && <img src={item.image_url} alt={item.title} className="w-full max-h-48 object-contain rounded-lg mb-3" />}
+                          <p className="text-sm whitespace-pre-wrap">{renderFormattedText(item.content)}</p>
                         </div>
                       ))
                     )}
@@ -1115,14 +867,71 @@ const Admin = () => {
               </div>
             )}
 
+            {/* Pish Sabtenam Section */}
+            {activeSection === "pish_sabtenam" && (
+              <div className="space-y-6 animate-fade-in">
+                <h1 className="text-2xl font-bold flex items-center gap-3"><ClipboardList className="w-8 h-8 text-primary" /> مدیریت پیش ثبت‌نام</h1>
+                {editingPish ? (
+                  <Card className="p-6 border-2">
+                    <h3 className="text-lg font-bold mb-4">ویرایش واحد {editingPish.unit_number}</h3>
+                    <div className="space-y-4">
+                      <Input placeholder="عنوان" value={pishForm.title} onChange={(e) => setPishForm({ ...pishForm, title: e.target.value })} className="text-right" />
+                      <Textarea placeholder="متن (از ** برای بولد کردن استفاده کنید)" value={pishForm.content} onChange={(e) => setPishForm({ ...pishForm, content: e.target.value })} className="text-right min-h-[120px]" />
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">تصویر</label>
+                        <input type="file" ref={pishImageRef} onChange={(e) => setPishImage(e.target.files?.[0] || null)} className="hidden" accept="image/*" />
+                        <Button type="button" variant="outline" onClick={() => pishImageRef.current?.click()} className="w-full gap-2 justify-start">
+                          <ImageIcon className="w-4 h-4" /> {pishImage ? pishImage.name : editingPish.image_url ? "تغییر تصویر" : "انتخاب تصویر"}
+                        </Button>
+                        {(editingPish.image_url || pishImage) && (
+                          <img src={pishImage ? URL.createObjectURL(pishImage) : editingPish.image_url!} alt="preview" className="w-full max-h-48 object-contain rounded-lg mt-2" />
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={handleSavePish} disabled={pishLoading} className="flex-1">{pishLoading ? "در حال ذخیره..." : "ذخیره"}</Button>
+                        <Button variant="outline" onClick={() => setEditingPish(null)}>انصراف</Button>
+                      </div>
+                    </div>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {pishSabtenamList.map((pish) => (
+                      <Card key={pish.id} className="p-6 border-2">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-bold text-lg">{pish.title || `واحد ${pish.unit_number}`}</h3>
+                          <div className="flex items-center gap-2">
+                            <Switch checked={pish.is_enabled} onCheckedChange={() => togglePishEnabled(pish)} />
+                            <span className="text-xs text-muted-foreground">{pish.is_enabled ? "فعال" : "غیرفعال"}</span>
+                          </div>
+                        </div>
+                        {pish.image_url && <img src={pish.image_url} alt={pish.title} className="w-full h-32 object-contain rounded-lg mb-3" />}
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{pish.content || "بدون محتوا"}</p>
+                        <Button variant="outline" className="w-full gap-2" onClick={() => handleEditPish(pish)}>
+                          <Edit2 className="w-4 h-4" /> ویرایش
+                        </Button>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Roles Section */}
+            {activeSection === "roles" && (
+              <div className="space-y-6 animate-fade-in">
+                <h1 className="text-2xl font-bold flex items-center gap-3"><Shield className="w-8 h-8 text-primary" /> نقش‌ها</h1>
+                <Card className="p-8 border-2 text-center">
+                  <Shield className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-bold mb-2">این بخش به زودی فعال می‌شود</h3>
+                  <p className="text-muted-foreground">مدیریت نقش‌ها و دسترسی‌ها در نسخه بعدی اضافه خواهد شد</p>
+                </Card>
+              </div>
+            )}
+
             {/* Messages Section */}
             {activeSection === "messages" && (
               <div className="space-y-6 animate-fade-in">
-                <h1 className="text-2xl font-bold flex items-center gap-3">
-                  <MessageSquare className="w-8 h-8 text-primary" />
-                  پیام‌های تماس
-                </h1>
-
+                <h1 className="text-2xl font-bold flex items-center gap-3"><MessageSquare className="w-8 h-8 text-primary" /> پیام‌های تماس</h1>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {messages.length === 0 ? (
                     <Card className="p-12 text-center border-2 col-span-full">
@@ -1138,16 +947,8 @@ const Admin = () => {
                             <p className="text-sm text-muted-foreground font-mono" dir="ltr">{msg.phone}</p>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(msg.created_at).toLocaleDateString('fa-IR')}
-                            </span>
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              onClick={() => deleteMessage(msg.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleDateString('fa-IR')}</span>
+                            <Button variant="destructive" size="icon" onClick={() => deleteMessage(msg.id)}><Trash2 className="w-4 h-4" /></Button>
                           </div>
                         </div>
                         <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
@@ -1161,11 +962,7 @@ const Admin = () => {
             {/* Chat Section */}
             {activeSection === "chat" && (
               <div className="space-y-6 animate-fade-in">
-                <h1 className="text-2xl font-bold flex items-center gap-3">
-                  <Send className="w-8 h-8 text-primary" />
-                  چت
-                </h1>
-                
+                <h1 className="text-2xl font-bold flex items-center gap-3"><Send className="w-8 h-8 text-primary" /> چت</h1>
                 {currentUserId && <ChatPanel currentUserId={currentUserId} />}
               </div>
             )}
@@ -1177,33 +974,16 @@ const Admin = () => {
       <Dialog open={studentPeriodsDialogOpen} onOpenChange={setStudentPeriodsDialogOpen}>
         <DialogContent dir="rtl" className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5" />
-              نمرات {selectedStudentForGrades?.full_name}
-            </DialogTitle>
-            <DialogDescription>
-              افزودن دوره نمره و ویرایش نمرات دانش‌آموز
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5" /> نمرات {selectedStudentForGrades?.full_name}</DialogTitle>
+            <DialogDescription>افزودن دوره نمره و ویرایش نمرات دانش‌آموز</DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
-              <Input
-                placeholder="عنوان دوره (مثال: امتحان دی‌ماه)"
-                value={newPeriodTitle}
-                onChange={(e) => setNewPeriodTitle(e.target.value)}
-                className="flex-1 text-right"
-              />
-              <Button onClick={createPeriodForStudent} disabled={loading || !newPeriodTitle.trim()}>
-                <Plus className="w-4 h-4" />
-              </Button>
+              <Input placeholder="عنوان دوره (مثال: امتحان دی‌ماه)" value={newPeriodTitle} onChange={(e) => setNewPeriodTitle(e.target.value)} className="flex-1 text-right" />
+              <Button onClick={createPeriodForStudent} disabled={loading || !newPeriodTitle.trim()}><Plus className="w-4 h-4" /></Button>
             </div>
-
             <div className="space-y-2">
-              <h4 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                دوره‌های نمره
-              </h4>
+              <h4 className="font-medium text-sm text-muted-foreground flex items-center gap-2"><Calendar className="w-4 h-4" /> دوره‌های نمره</h4>
               {getPeriodsForStudentGrade().length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">هیچ دوره‌ای وجود ندارد</p>
               ) : (
@@ -1211,22 +991,8 @@ const Admin = () => {
                   <div key={period.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
                     <span className="font-medium">{period.title}</span>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openGradeDialog(period)}
-                        className="gap-1"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                        نمرات
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => deleteGradePeriod(period.id)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => openGradeDialog(period)} className="gap-1"><Edit2 className="w-3 h-3" /> نمرات</Button>
+                      <Button variant="destructive" size="sm" onClick={() => deleteGradePeriod(period.id)}><Trash2 className="w-3 h-3" /></Button>
                     </div>
                   </div>
                 ))
@@ -1240,36 +1006,42 @@ const Admin = () => {
       <Dialog open={gradeDialogOpen} onOpenChange={setGradeDialogOpen}>
         <DialogContent dir="rtl" className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5" />
-              نمرات {selectedStudentForGrades?.full_name}
-            </DialogTitle>
-            <DialogDescription>
-              دوره: {selectedPeriod?.title}
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5" /> نمرات {selectedStudentForGrades?.full_name}</DialogTitle>
+            <DialogDescription>دوره: {selectedPeriod?.title}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
             {SUBJECT_OPTIONS.map((subject) => (
               <div key={subject.value} className="flex items-center gap-4">
                 <label className="w-32 font-medium text-right text-sm">{subject.label}:</label>
-                <Input
-                  value={studentGrades[subject.value] || ""}
-                  onChange={(e) => setStudentGrades({
-                    ...studentGrades,
-                    [subject.value]: e.target.value
-                  })}
-                  placeholder="نمره"
-                  className="flex-1 text-right"
-                />
+                <Input value={studentGrades[subject.value] || ""} onChange={(e) => setStudentGrades({ ...studentGrades, [subject.value]: e.target.value })} placeholder="نمره" className="flex-1 text-right" />
               </div>
             ))}
-            <Button 
-              onClick={saveStudentPeriodGrades} 
-              disabled={loading}
-              className="w-full mt-4"
-            >
-              {loading ? "در حال ذخیره..." : "ذخیره نمرات"}
-            </Button>
+            <Button onClick={saveStudentPeriodGrades} disabled={loading} className="w-full mt-4">{loading ? "در حال ذخیره..." : "ذخیره نمرات"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Edit2 className="w-5 h-5" /> ویرایش {editingStudent?.full_name}</DialogTitle>
+            <DialogDescription>فیلدهایی که خالی هستند تغییر نمی‌کنند</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">نام و نام خانوادگی</label>
+              <Input value={editUserForm.full_name} onChange={(e) => setEditUserForm({ ...editUserForm, full_name: e.target.value })} className="text-right" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">نام کاربری جدید</label>
+              <Input value={editUserForm.username} onChange={(e) => setEditUserForm({ ...editUserForm, username: e.target.value })} className="text-right" placeholder="خالی = بدون تغییر" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">رمز عبور جدید</label>
+              <Input type="password" value={editUserForm.password} onChange={(e) => setEditUserForm({ ...editUserForm, password: e.target.value })} className="text-right" placeholder="خالی = بدون تغییر" />
+            </div>
+            <Button onClick={handleEditUser} disabled={editUserLoading} className="w-full">{editUserLoading ? "در حال ذخیره..." : "ذخیره تغییرات"}</Button>
           </div>
         </DialogContent>
       </Dialog>

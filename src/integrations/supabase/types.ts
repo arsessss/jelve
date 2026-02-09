@@ -338,6 +338,39 @@ export type Database = {
         }
         Relationships: []
       }
+      pish_sabtenam: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          image_url: string | null
+          is_enabled: boolean
+          title: string
+          unit_number: number
+          updated_at: string | null
+        }
+        Insert: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_enabled?: boolean
+          title?: string
+          unit_number: number
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_enabled?: boolean
+          title?: string
+          unit_number?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       site_content: {
         Row: {
           id: string
