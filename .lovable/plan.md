@@ -1,224 +1,153 @@
 
-# Comprehensive Fixes and Features Plan
 
-## Summary
-This plan addresses multiple UI bugs, mobile responsiveness issues, and adds new features including an Akhbar (News) system and the ability to kick users from groups.
+# Implementation Plan: 9-Item Fix and Feature List
 
----
+## 1. Remove ALL X/Close Buttons
 
-## Issues Identified
+Remove the built-in close button from `dialog.tsx` DialogContent component entirely. Users will close dialogs by clicking outside (the overlay). This affects all dialogs site-wide (Admin grade dialogs, Student password dialog, Chat dialogs).
 
-### 1. Duplicate Close (X) Buttons
-**Problem:** The DialogContent component in `dialog.tsx` has a built-in close button at `right-4 top-4`. The Admin.tsx page also adds custom close buttons in the DialogHeader for grade dialogs, resulting in two X buttons.
-
-**Solution:** Remove the custom X buttons from Admin.tsx dialogs and rely on the dialog component's built-in close button (repositioned to the left for RTL).
-
-### 2. Buttons Not Visible
-**Problem:** Some buttons may have styling issues causing low contrast or visibility problems.
-
-**Solution:** Review and fix button styling in the affected components.
-
-### 3. Mobile Responsiveness Issues
-**Problem:** The sidebar layout in Student and Admin pages may not work well on mobile devices.
-
-**Solution:** Improve mobile layout with proper responsive design, ensure touch targets are adequate size (min 44px), and fix any overflow issues.
-
-### 4. Missing Animation on Nomre (Grades) Section
-**Problem:** The grades section doesn't have entrance animations.
-
-**Solution:** Add `animate-fade-in` class to the grades section container.
-
-### 5. User Names/Profiles Not Visible in Chat
-**Problem:** Currently, sender name only shows for messages from other users, but profile pictures are not shown inline with messages.
-
-**Solution:** Enhance message display to show sender's profile picture and name for all messages in group chats.
-
-### 6. Cannot Kick People from Groups
-**Problem:** Group admins can make/remove admins but cannot kick (remove) members from groups.
-
-**Solution:** Add a "Kick Member" feature for group admins in both the frontend and backend.
-
-### 7. Missing Akhbar (News/Announcements) Tab
-**Problem:** Students need a news section on their main page, and admins need tools to create announcements with images and formatted text.
-
-**Solution:** Create an Akhbar system with:
-- New database table for announcements
-- Admin UI for creating/managing announcements (with image upload, bold text support)
-- Student UI for viewing announcements
+**File:** `src/components/ui/dialog.tsx`
+- Remove the `<DialogPrimitive.Close>` button with the X icon from DialogContent
 
 ---
 
-## Implementation Details
+## 2. Fix Unnecessary Scrollable Areas + Resize Grades
 
-### Phase 1: Fix Dialog Close Button Issue
+Several areas use `ScrollArea` or `overflow-auto` unnecessarily. The grades section in the student view should be sized to avoid scrolling.
 
-**File: `src/components/ui/dialog.tsx`**
-- Move the built-in close button from `right-4` to `left-4` for RTL compatibility
-- This single close button will work for all dialogs
+**Files:**
+- `src/components/ChatPanel.tsx` - Keep scroll only on the messages area and conversation list (these need scrolling). Review other scroll areas in group settings dialogs.
+- `src/pages/Student.tsx` - Ensure grades collapsible content doesn't need inner scrolling. Use auto-height instead of fixed heights where possible.
+- `src/pages/Admin.tsx` - Review dialog content areas (`max-h-[85vh] overflow-y-auto` and `max-h-[80vh] overflow-y-auto`) - keep these as they have dynamic content that could exceed viewport.
 
-**File: `src/pages/Admin.tsx`**
-- Remove the custom X button from `studentPeriodsDialogOpen` dialog (lines 1002-1008)
-- Remove the custom X button from `gradeDialogOpen` dialog (lines 1073-1079)
-- Adjust DialogTitle padding since custom button is removed
+---
 
-### Phase 2: Mobile Responsiveness Fixes
+## 3. Fix Invisible Buttons on Login (Vorod) and Contact (Ertebat) Pages
 
-**File: `src/pages/Student.tsx`**
-- Improve sidebar responsiveness for mobile
-- Ensure horizontal scroll on mobile sidebar works smoothly
-- Add proper touch target sizes
-- Fix main content area padding on mobile
+Both pages use `gradient-primary` class on buttons, but this CSS variable `--gradient-primary` is never defined (it was removed when gradients were removed). The buttons render with no visible background.
 
-**File: `src/pages/Admin.tsx`**
-- Same mobile improvements as Student.tsx
-- Ensure all forms work well on small screens
+**Fix:** Replace `gradient-primary` with `bg-primary` on:
+- `src/pages/Login.tsx` line 159 - the submit button
+- `src/pages/Contact.tsx` line 132 - the submit button
 
-### Phase 3: Add Animation to Nomre Section
+---
 
-**File: `src/pages/Student.tsx`**
-- The grades section at line 476 already has `animate-fade-in` class
-- Verify Collapsible animations work correctly
+## 4. Admin Can Change Student Username, Name, and Password
 
-### Phase 4: Enhance Chat User Identification
+Add an edit dialog in the Admin users section. When admin clicks "edit" on a student, a dialog opens with fields for:
+- Full name (updates both `custom_users.full_name` and `students.full_name`)
+- Username (updates `custom_users.username`)
+- New password (optional - only changes if filled, updates via a new edge function or direct hash update)
 
-**File: `src/components/ChatPanel.tsx`**
-- Add sender's profile picture next to messages in group chats
-- Always show sender name for group messages (not just for others' messages)
-- Display avatar beside each message with proper RTL alignment
+**Files:**
+- `src/pages/Admin.tsx` - Add edit dialog state, form, and handler functions
+- `supabase/functions/data-api/index.ts` - The update action already supports `custom_users` for admins. For password changes, we need to add password hashing in the data-api or create a dedicated admin action. Best approach: add an `admin-update-user` action to the `data-api` edge function that handles password hashing with bcrypt.
 
-### Phase 5: Add Kick Member Feature
+---
 
-**Backend: `supabase/functions/chat-api/index.ts`**
-- Add new action `kick_member` that:
-  - Validates the requester is a group admin
-  - Cannot kick the group creator
-  - Removes the target user from `conversation_participants`
-  - Removes target from `group_admins` if they were an admin
+## 5. Student Can Change Their Own Username
 
-**Frontend: `src/lib/chat-api.ts`**
-- Add `kickMember(conversationId: string, userId: string)` function
+Add username editing to the Student account section.
 
-**Frontend: `src/components/ChatPanel.tsx`**
-- Add a "Kick" button next to each member in group settings (visible only to admins)
-- Cannot kick the group creator or yourself
+**File:** `src/pages/Student.tsx`
+- Add a username change field/dialog in the account section
+- Use `secureApi.update('custom_users', userId, { username: newUsername })` (already permitted for students on their own record)
 
-### Phase 6: Add Akhbar (News) System
+---
 
-**Database Migration:**
+## 6. New "Roles" Section in Admin Sidebar
+
+Add a placeholder "Roles" section to the admin sidebar. It will show a simple card saying "این بخش به زودی فعال می‌شود" (This section will be activated soon).
+
+**File:** `src/pages/Admin.tsx`
+- Add `"roles"` to `ActiveSection` type
+- Add sidebar item with a description icon
+- Add placeholder content section like a inside a tab theres a description about some teacher and their picture is left above corner 
+
+---
+
+## 7. New "Pish Sabtenam" Tab with 3 Links to Separate Pages
+
+Add a "پیش ثبت‌نام" (Pre-registration) section to the student page that shows 3 buttons above the "واحدهای آموزشی" (school units). Each button links to its own route (`/pish-sabtenam/1`, `/pish-sabtenam/2`, `/pish-sabtenam/3`). These pages show text and images that admins can configure. ( they have to enable and disable these the pish sabtenam is not always enabled automatically )
+
+**New files:**
+- `src/pages/PishSabtenam.tsx` - A page component that reads content from a configurable source
+
+**Modified files:**
+- `src/pages/Student.tsx` - Add "پیش ثبت‌نام" to sidebar items
+- `src/pages/Admin.tsx` - Add management section for pish sabtenam content (title, text, image for each of 3 units)
+- `src/App.tsx` - Add routes for `/pish-sabtenam/:id`
+
+**Database:** Create a `pish_sabtenam` table with columns: `id`, `unit_number` (1-3), `title`, `content`, `image_url`, `created_at`, `updated_at`
+
+---
+
+## 8. Akhbar Image Popup for Resize/Preview
+
+When uploading an image for akhbar, show a preview popup where the admin can see how the image will look. Also in the student akhbar view, clicking an image opens a full-size popup. Images should use `object-contain` instead of `object-cover` to avoid cropping. Same for pish sabtenam images.
+
+**Files:**
+- `src/pages/Admin.tsx` - Add image preview dialog when akhbar image is selected
+- `src/pages/Student.tsx` - Add click-to-enlarge on akhbar images (open in a dialog with full resolution, `object-contain`)
+- `src/pages/PishSabtenam.tsx` - Same image display behavior
+
+---
+
+## 9. Chat Messages Show Sender's Avatar Alongside Name
+
+Currently avatars show for group messages from others, but the layout needs improvement. Ensure every message in a group chat shows the sender's avatar and name clearly.
+
+**File:** `src/components/ChatPanel.tsx`
+- The avatar is already shown (lines 878-883) for group messages from others
+- Ensure avatar is always visible (not just on hover) and properly aligned in RTL
+- Make avatar display more prominent with proper spacing
+
+---
+
+## 10. everything for mobile is also fixed 
+
+the tab and everything in mobile is fixed
+
+
+
+## Technical Details
+
+### Database Migration (for item 7)
 ```sql
-CREATE TABLE public.akhbar (
+CREATE TABLE public.pish_sabtenam (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  title text NOT NULL,
-  content text NOT NULL,
+  unit_number integer NOT NULL CHECK (unit_number BETWEEN 1 AND 3),
+  title text NOT NULL DEFAULT '',
+  content text NOT NULL DEFAULT '',
   image_url text,
-  target_grades text[] DEFAULT '{}',
-  is_published boolean DEFAULT true,
-  created_by uuid NOT NULL,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE public.akhbar ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pish_sabtenam ENABLE ROW LEVEL SECURITY;
+
+-- Seed the 3 units
+INSERT INTO public.pish_sabtenam (unit_number, title, content) VALUES
+  (1, 'دوره اول پسرانه', ''),
+  (2, 'دوره دوم پسرانه', ''),
+  (3, 'دوره دوم دخترانه', '');
 ```
 
-**Backend: `supabase/functions/data-api/index.ts`**
-- Add `akhbar` table to the permissions object for admin read/write access
+### Edge Function Updates
+- `supabase/functions/data-api/index.ts`: Add `pish_sabtenam` table to permissions (admin read/write, student read). Add special handling for admin password updates using bcrypt hashing.
 
-**Frontend: `src/pages/Student.tsx`**
-- Add "Akhbar" tab to the sidebar (rename "Main" or add as separate section)
-- Display news/announcements filtered by student's grade
-- Support rendering bold text (text wrapped in `**` converted to `<strong>`)
-- Display images from announcements
+### Files Summary
 
-**Frontend: `src/pages/Admin.tsx`**
-- Add "Akhbar" section to the sidebar
-- Create form for adding announcements:
-  - Title input
-  - Content textarea (supports **bold** syntax)
-  - Image upload
-  - Grade selector (multi-select or "All grades")
-  - Publish toggle
-- List of existing announcements with edit/delete options
+| File | Changes |
+|------|---------|
+| `src/components/ui/dialog.tsx` | Remove X close button |
+| `src/pages/Login.tsx` | Fix button: `gradient-primary` to `bg-primary` |
+| `src/pages/Contact.tsx` | Fix button: `gradient-primary` to `bg-primary` |
+| `src/pages/Admin.tsx` | Add edit user dialog, roles section, pish sabtenam management, akhbar image preview |
+| `src/pages/Student.tsx` | Add username editing, pish sabtenam tab, akhbar image popup |
+| `src/components/ChatPanel.tsx` | Improve avatar display in messages |
+| `src/pages/PishSabtenam.tsx` | New page for pre-registration info |
+| `src/App.tsx` | Add pish sabtenam routes |
+| `supabase/functions/data-api/index.ts` | Add pish_sabtenam permissions, admin password update |
+| Database migration | Create pish_sabtenam table |
 
----
-
-## Technical Details
-
-### Dialog Close Button Fix
-```tsx
-// dialog.tsx - Move close button to left for RTL
-<DialogPrimitive.Close className="absolute left-4 top-4 ...">
-```
-
-### Kick Member API
-```typescript
-// chat-api.ts
-kickMember: (conversationId: string, userId: string) =>
-  chatApiCall<{ success: boolean }>('kick_member', { 
-    conversation_id: conversationId,
-    user_id: userId,
-  }),
-```
-
-### Bold Text Rendering Helper
-```typescript
-const renderFormattedText = (text: string) => {
-  // Convert **text** to <strong>text</strong>
-  return text.split(/(\*\*.*?\*\*)/g).map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    }
-    return part;
-  });
-};
-```
-
-### Chat Message with Profile Picture
-```tsx
-// In message rendering
-<div className="flex items-start gap-2">
-  {selectedConversation.is_group && !isOwn && (
-    <Avatar className="w-6 h-6 shrink-0">
-      <AvatarImage src={msg.sender?.profile_picture || undefined} />
-      <AvatarFallback><User className="w-3 h-3" /></AvatarFallback>
-    </Avatar>
-  )}
-  <div className="flex-1">
-    {/* message content */}
-  </div>
-</div>
-```
-
----
-
-## Files to Modify
-
-1. `src/components/ui/dialog.tsx` - Fix close button position
-2. `src/pages/Admin.tsx` - Remove duplicate X buttons, add Akhbar section
-3. `src/pages/Student.tsx` - Add Akhbar tab, improve mobile responsiveness
-4. `src/components/ChatPanel.tsx` - Add profile pictures to messages, add kick member feature
-5. `src/lib/chat-api.ts` - Add kickMember function
-6. `supabase/functions/chat-api/index.ts` - Add kick_member action
-7. `supabase/functions/data-api/index.ts` - Add akhbar table permissions
-
-## New Files
-
-None required - all features will be added to existing files.
-
-## Database Changes
-
-1. Create `akhbar` table for announcements with appropriate columns and RLS policies
-
----
-
-## Summary of Deliverables
-
-| Issue | Solution |
-|-------|----------|
-| Duplicate X buttons | Fix dialog.tsx + remove custom buttons in Admin.tsx |
-| Buttons not visible | Review and fix button contrast/styling |
-| Mobile issues | Improve responsive layout in Student/Admin pages |
-| Nomre animation | Already has animation, verify it works |
-| Chat user names | Add profile pictures and names to all group messages |
-| Kick from groups | Add kick_member API + UI in group settings |
-| Akhbar tab | Create announcements table, Admin create UI, Student view UI |
