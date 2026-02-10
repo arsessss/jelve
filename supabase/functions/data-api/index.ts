@@ -15,24 +15,20 @@ interface RequestBody {
   id?: string;
 }
 
-// Rate limiting using in-memory store
 const apiAttempts = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 100;
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 function checkRateLimit(token: string): { allowed: boolean; retryAfter?: number } {
   const now = Date.now();
   const record = apiAttempts.get(token);
-  
   if (!record || now > record.resetAt) {
     apiAttempts.set(token, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
     return { allowed: true };
   }
-  
   if (record.count >= RATE_LIMIT_MAX) {
     return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
   }
-  
   record.count++;
   return { allowed: true };
 }
@@ -52,10 +48,8 @@ serve(async (req) => {
       );
     }
 
-    // Rate limit by token
     const rateCheck = checkRateLimit(token);
     if (!rateCheck.allowed) {
-      console.log('Data API rate limit exceeded for token');
       return new Response(
         JSON.stringify({ error: 'Too many requests' }),
         { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateCheck.retryAfter) } }
@@ -89,32 +83,43 @@ serve(async (req) => {
     }
 
     // Get user role
-    const { data: roleData, error: roleError } = await supabase
+    const { data: roleData } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', session.user_id)
       .single();
 
-    console.log('Role lookup for user:', session.user_id, 'Result:', roleData, 'Error:', roleError);
-
     const userRole: string | null = roleData?.role || null;
     const isAdmin = userRole === 'admin';
 
-    console.log('User role:', userRole, 'isAdmin:', isAdmin, 'Action:', action, 'Table:', table);
+    // Check if user is modir
+    let isModir = false;
+    if (isAdmin) {
+      const { data: userData } = await supabase
+        .from('custom_users')
+        .select('username')
+        .eq('id', session.user_id)
+        .single();
+      isModir = userData?.username === '@Modir';
+    }
+
+    const isParent = userRole === 'parent';
 
     // Define allowed operations per table and role
     const permissions: Record<string, { read: string[]; write: string[]; delete: string[] }> = {
-      students: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
-      student_grades: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
-      grade_periods: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
-      student_period_grades: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
+      students: { read: ['admin', 'student', 'parent'], write: ['admin'], delete: ['admin'] },
+      student_grades: { read: ['admin', 'student', 'parent'], write: ['admin'], delete: ['admin'] },
+      grade_periods: { read: ['admin', 'student', 'parent'], write: ['admin'], delete: ['admin'] },
+      student_period_grades: { read: ['admin', 'student', 'parent'], write: ['admin'], delete: ['admin'] },
       online_classes: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       jozveh: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
       contact_messages: { read: ['admin'], write: [], delete: ['admin'] },
-      custom_users: { read: ['admin', 'student'], write: ['admin', 'student'], delete: ['admin'] },
+      custom_users: { read: ['admin', 'student', 'parent'], write: ['admin', 'student', 'parent'], delete: ['admin'] },
       user_roles: { read: ['admin'], write: ['admin'], delete: ['admin'] },
-      akhbar: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
+      akhbar: { read: ['admin', 'student', 'parent'], write: ['admin'], delete: ['admin'] },
       pish_sabtenam: { read: ['admin', 'student'], write: ['admin'], delete: ['admin'] },
+      taklif: { read: ['admin', 'student'], write: ['admin', 'student'], delete: ['admin'] },
+      parent_students: { read: ['admin', 'parent'], write: ['admin'], delete: ['admin'] },
     };
 
     const tablePerms = permissions[table];
@@ -125,12 +130,9 @@ serve(async (req) => {
       );
     }
 
-    // Check permissions - handle null role
-    const canRead = userRole !== null && (tablePerms.read.includes(userRole) || tablePerms.read.includes('*'));
+    const canRead = userRole !== null && tablePerms.read.includes(userRole);
     const canWrite = userRole !== null && tablePerms.write.includes(userRole);
     const canDelete = userRole !== null && tablePerms.delete.includes(userRole);
-
-    console.log('Permissions check:', { canRead, canWrite, canDelete, tablePerms });
 
     let result;
     let error;
@@ -146,19 +148,31 @@ serve(async (req) => {
 
         let query = supabase.from(table).select('*');
         
-        // Apply filters
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
             query = query.eq(key, value);
           }
         }
 
-        // For students, filter by their own data unless admin
+        // Row-level filtering for non-admins
         if (!isAdmin && table === 'students') {
-          query = query.eq('user_id', session.user_id);
+          if (isParent) {
+            // Parents can only see their linked children
+            const { data: links } = await supabase
+              .from('parent_students')
+              .select('student_id')
+              .eq('parent_id', session.user_id);
+            const studentIds = links?.map(l => l.student_id) || [];
+            if (studentIds.length > 0) {
+              query = query.in('id', studentIds);
+            } else {
+              query = query.eq('id', 'none');
+            }
+          } else {
+            query = query.eq('user_id', session.user_id);
+          }
         }
         if (!isAdmin && table === 'student_grades') {
-          // Get student ID first
           const { data: studentData } = await supabase
             .from('students')
             .select('id')
@@ -168,9 +182,24 @@ serve(async (req) => {
             query = query.eq('student_id', studentData.id);
           }
         }
-        // Students can only read their own user record
         if (!isAdmin && table === 'custom_users') {
           query = query.eq('id', session.user_id);
+        }
+        if (!isAdmin && table === 'taklif') {
+          const { data: studentData } = await supabase
+            .from('students')
+            .select('id')
+            .eq('user_id', session.user_id)
+            .single();
+          if (studentData) {
+            query = query.eq('student_id', studentData.id);
+          }
+        }
+        if (isParent && table === 'parent_students') {
+          query = query.eq('parent_id', session.user_id);
+        }
+        if (isParent && (table === 'student_period_grades' || table === 'grade_periods')) {
+          // Parents can read these freely (filtered by grade in frontend)
         }
 
         const { data: selectData, error: selectError } = await query.order('created_at', { ascending: false });
@@ -185,6 +214,23 @@ serve(async (req) => {
             JSON.stringify({ error: 'Permission denied' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+        // Students can only insert their own taklif
+        if (!isAdmin && table === 'taklif') {
+          const { data: studentData } = await supabase
+            .from('students')
+            .select('id, grade')
+            .eq('user_id', session.user_id)
+            .single();
+          if (!studentData) {
+            return new Response(
+              JSON.stringify({ error: 'Student not found' }),
+              { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          // Force student_id and grade
+          (data as Record<string, unknown>).student_id = studentData.id;
+          (data as Record<string, unknown>).grade = studentData.grade;
         }
         const { data: insertData, error: insertError } = await supabase.from(table).insert(data).select();
         result = insertData;
@@ -205,7 +251,7 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        // Students can only update their own custom_users record
+        // Non-admin can only update their own custom_users record
         if (!isAdmin && table === 'custom_users' && id !== session.user_id) {
           return new Response(
             JSON.stringify({ error: 'Permission denied' }),
@@ -243,6 +289,21 @@ serve(async (req) => {
             JSON.stringify({ error: 'ID is required for delete' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+        // For deleting admin accounts, only modir can do it
+        if (table === 'custom_users' || table === 'user_roles') {
+          // Check if target is an admin
+          const { data: targetRole } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', id)
+            .single();
+          if (targetRole?.role === 'admin' && !isModir) {
+            return new Response(
+              JSON.stringify({ error: 'فقط مدیر می‌تواند حساب ادمین را حذف کند' }),
+              { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
         }
         const { error: deleteError } = await supabase.from(table).delete().eq('id', id);
         error = deleteError;

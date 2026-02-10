@@ -70,6 +70,15 @@ export const RoleBasedHeader = () => {
                 دانش‌آموز
               </Link>
             )}
+
+            {session?.role === "parent" && (
+              <Link 
+                to="/parent" 
+                className="nav-link text-foreground/80 hover:text-foreground font-medium py-1 touch-target flex items-center"
+              >
+                والدین
+              </Link>
+            )}
             
             {!session && (
               <Link 

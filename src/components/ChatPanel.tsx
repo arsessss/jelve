@@ -872,7 +872,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
               <div className="space-y-4">
                 {messages.map(msg => {
                   const isOwn = msg.sender_id === currentUserId;
-                  const showAvatar = selectedConversation.is_group && !isOwn && msg.sender;
+                  const showAvatar = !isOwn && msg.sender;
                   return (
                     <div key={msg.id} className={`flex ${isOwn ? 'justify-start' : 'justify-end'} group`}>
                       {showAvatar && (
@@ -882,7 +882,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                         </Avatar>
                       )}
                       <div className={`max-w-[70%] ${isOwn ? 'order-1' : 'order-2'} relative`}>
-                        {!isOwn && msg.sender && selectedConversation.is_group && (
+                        {!isOwn && msg.sender && (
                           <p className="text-xs text-muted-foreground mb-1 text-right">
                             {msg.sender.full_name || msg.sender.username}
                           </p>
