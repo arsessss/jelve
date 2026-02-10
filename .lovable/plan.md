@@ -1,153 +1,227 @@
 
+# Combined Implementation Plan: All Updates
+# WARNING MUST DO ALL THIS WITH 1 CREDIT!!!!1
+## 1. Parent Accounts
 
-# Implementation Plan: 9-Item Fix and Feature List
+**New role:** Add `parent` to the `app_role` enum. Create a `parent_students` linking table (parent_id, student_id) so parents can be associated with their children.
 
-## 1. Remove ALL X/Close Buttons
+**Login:** Add "والدین" (Parent) as a third role option in Login.tsx. Parents log in the same way as students/admins.
 
-Remove the built-in close button from `dialog.tsx` DialogContent component entirely. Users will close dialogs by clicking outside (the overlay). This affects all dialogs site-wide (Admin grade dialogs, Student password dialog, Chat dialogs).
+**Frontend:**
+- New `src/pages/Parent.tsx` page - a read-only portal where parents can see their linked children's grades and news
+- Add `/parent` route in App.tsx
+- Update `RoleBasedHeader.tsx` to show "والدین" link for parent users
+- Update `Login.tsx` to include parent role option
+- Admin can create parent accounts from the user creation form (add "parent" to role selector)
+- Admin can link parents to students
 
-**File:** `src/components/ui/dialog.tsx`
-- Remove the `<DialogPrimitive.Close>` button with the X icon from DialogContent
-
----
-
-## 2. Fix Unnecessary Scrollable Areas + Resize Grades
-
-Several areas use `ScrollArea` or `overflow-auto` unnecessarily. The grades section in the student view should be sized to avoid scrolling.
-
-**Files:**
-- `src/components/ChatPanel.tsx` - Keep scroll only on the messages area and conversation list (these need scrolling). Review other scroll areas in group settings dialogs.
-- `src/pages/Student.tsx` - Ensure grades collapsible content doesn't need inner scrolling. Use auto-height instead of fixed heights where possible.
-- `src/pages/Admin.tsx` - Review dialog content areas (`max-h-[85vh] overflow-y-auto` and `max-h-[80vh] overflow-y-auto`) - keep these as they have dynamic content that could exceed viewport.
-
----
-
-## 3. Fix Invisible Buttons on Login (Vorod) and Contact (Ertebat) Pages
-
-Both pages use `gradient-primary` class on buttons, but this CSS variable `--gradient-primary` is never defined (it was removed when gradients were removed). The buttons render with no visible background.
-
-**Fix:** Replace `gradient-primary` with `bg-primary` on:
-- `src/pages/Login.tsx` line 159 - the submit button
-- `src/pages/Contact.tsx` line 132 - the submit button
+**Auth updates:**
+- `auth-signup` already supports any role, but `auth-login` needs to return `parent` role properly (it already does via the user_roles table)
+- `auth.ts` AuthSession role type: add `"parent"`
+- `data-api`: Add `parent_students` permissions and allow parents to read their children's grades
 
 ---
 
-## 4. Admin Can Change Student Username, Name, and Password
+## 2. Modir Account (Special Admin)
 
-Add an edit dialog in the Admin users section. When admin clicks "edit" on a student, a dialog opens with fields for:
-- Full name (updates both `custom_users.full_name` and `students.full_name`)
-- Username (updates `custom_users.username`)
-- New password (optional - only changes if filled, updates via a new edge function or direct hash update)
+The modir is NOT a separate role. It is the admin account with username `@Modir`. The system detects modir by checking `username === "@Modir"`.
 
-**Files:**
-- `src/pages/Admin.tsx` - Add edit dialog state, form, and handler functions
-- `supabase/functions/data-api/index.ts` - The update action already supports `custom_users` for admins. For password changes, we need to add password hashing in the data-api or create a dedicated admin action. Best approach: add an `admin-update-user` action to the `data-api` edge function that handles password hashing with bcrypt.
+**Database:** Seed the `@Modir` account via migration:
+- Insert into `custom_users` with username `@Modir`, password `Jelve14041404` (plaintext, auto-hashed on first login), full_name "مدیر"
+- Insert into `user_roles` with role `admin`
 
----
+**Frontend (Admin.tsx):**
+- Detect modir: `const isModir = session?.user?.username === "@Modir";` (fetched from validated session)
+- When `isModir` is true:
+  - Show edit (username/password) and delete buttons on admin user cards
+  - Allow changing admin passwords via the edit user dialog
+- Store modir status in component state
 
-## 5. Student Can Change Their Own Username
-
-Add username editing to the Student account section.
-
-**File:** `src/pages/Student.tsx`
-- Add a username change field/dialog in the account section
-- Use `secureApi.update('custom_users', userId, { username: newUsername })` (already permitted for students on their own record)
+**Backend:**
+- `auth-change-password`: When an admin requests to change another user's password, additionally check if the target is an admin. If so, only allow if the requester's username is `@Modir`
+- `data-api`: For delete on `custom_users`/`user_roles` of admin accounts, verify requester is `@Modir`
 
 ---
 
-## 6. New "Roles" Section in Admin Sidebar
+## 3. Admins Can Change Their Own Password and Username
 
-Add a placeholder "Roles" section to the admin sidebar. It will show a simple card saying "این بخش به زودی فعال می‌شود" (This section will be activated soon).
-
-**File:** `src/pages/Admin.tsx`
-- Add `"roles"` to `ActiveSection` type
-- Add sidebar item with a description icon
-- Add placeholder content section like a inside a tab theres a description about some teacher and their picture is left above corner 
-
----
-
-## 7. New "Pish Sabtenam" Tab with 3 Links to Separate Pages
-
-Add a "پیش ثبت‌نام" (Pre-registration) section to the student page that shows 3 buttons above the "واحدهای آموزشی" (school units). Each button links to its own route (`/pish-sabtenam/1`, `/pish-sabtenam/2`, `/pish-sabtenam/3`). These pages show text and images that admins can configure. ( they have to enable and disable these the pish sabtenam is not always enabled automatically )
-
-**New files:**
-- `src/pages/PishSabtenam.tsx` - A page component that reads content from a configurable source
-
-**Modified files:**
-- `src/pages/Student.tsx` - Add "پیش ثبت‌نام" to sidebar items
-- `src/pages/Admin.tsx` - Add management section for pish sabtenam content (title, text, image for each of 3 units)
-- `src/App.tsx` - Add routes for `/pish-sabtenam/:id`
-
-**Database:** Create a `pish_sabtenam` table with columns: `id`, `unit_number` (1-3), `title`, `content`, `image_url`, `created_at`, `updated_at`
+**Admin.tsx:**
+- Add "حساب" (Account/Hesab) section to admin sidebar with a User icon
+- Add `"account"` to `ActiveSection` type
+- Include password change form (current password, new password, confirm) using `customAuth.changePassword()`
+- Include username change field using `secureApi.update('custom_users', ...)`
 
 ---
 
-## 8. Akhbar Image Popup for Resize/Preview
+## 4. Fix Pish Sabtenam: Buttons Above Vahed Amozeshi on Home Page
 
-When uploading an image for akhbar, show a preview popup where the admin can see how the image will look. Also in the student akhbar view, clicking an image opens a full-size popup. Images should use `object-contain` instead of `object-cover` to avoid cropping. Same for pish sabtenam images.
+The user wants enabled pish sabtenam buttons to appear above the corresponding school unit cards on the **main home page** (`/`), not in a separate student tab.
 
-**Files:**
-- `src/pages/Admin.tsx` - Add image preview dialog when akhbar image is selected
-- `src/pages/Student.tsx` - Add click-to-enlarge on akhbar images (open in a dialog with full resolution, `object-contain`)
-- `src/pages/PishSabtenam.tsx` - Same image display behavior
+**Home.tsx:**
+- Fetch `pish_sabtenam` data using the Supabase client directly (public read via RLS policy already exists)
+- For each of the 3 school blocks, if the corresponding pish sabtenam (by unit_number 1/2/3) is enabled, show a button above/on that card linking to `/pish-sabtenam/{unit_number}`
 
----
-
-## 9. Chat Messages Show Sender's Avatar Alongside Name
-
-Currently avatars show for group messages from others, but the layout needs improvement. Ensure every message in a group chat shows the sender's avatar and name clearly.
-
-**File:** `src/components/ChatPanel.tsx`
-- The avatar is already shown (lines 878-883) for group messages from others
-- Ensure avatar is always visible (not just on hover) and properly aligned in RTL
-- Make avatar display more prominent with proper spacing
+**Student.tsx:**
+- Remove `pish_sabtenam` from student sidebar (it's now on the home page)
+- Remove the pish sabtenam active section rendering
 
 ---
 
-## 10. everything for mobile is also fixed 
+## 5. Fix Chat: Show Profile Picture and Name for All Messages
 
-the tab and everything in mobile is fixed
+**ChatPanel.tsx line 875:**
+- Current: `const showAvatar = selectedConversation.is_group && !isOwn && msg.sender;`
+- Fix: `const showAvatar = !isOwn && msg.sender;`
+- Also show sender name for DM messages (remove the `selectedConversation.is_group` condition on line 885)
 
+---
 
+## 6. Notifications Revamp: Switch to Sonner
+
+Replace ALL `useToast()` / `toast({...})` calls with Sonner's `toast()` / `toast.success()` / `toast.error()` across every file.
+
+**sonner.tsx:** Configure with `position="top-center"`, `duration={3000}`, `dir="rtl"`
+
+**App.tsx:** Remove the old `<Toaster />` component (keep only Sonner)
+
+**Files to update (replace useToast with Sonner toast):**
+- `Admin.tsx`, `Student.tsx`, `ChatPanel.tsx`, `Login.tsx`, `Contact.tsx`, `PishSabtenam.tsx`, `SportLogin.tsx`
+- All notification messages must be in Persian
+
+---
+
+## 7. Taklif (Homework) System
+
+### 7.1 Database
+Create `taklif` table: `id` (uuid), `student_id` (uuid), `subject` (text), `file_url` (text), `file_name` (text), `grade` (text - student's class), `status` (text, default 'pending'), `created_at`, `updated_at`
+
+### 7.2 Student Side (Student.tsx)
+- Add "تکلیف" (Taklif) tab to sidebar
+- UI: Select subject from dropdown, upload file, submit
+- Show list of previously submitted homework with status
+
+### 7.3 Admin Side (Admin.tsx)
+- Add "تکلیف" (Taklif) tab to sidebar
+- Filters: subject dropdown + grade/class dropdown (7/1 through 9/4)
+- Display submitted homework cards with student name, subject, date, and download link
+- Admin can mark homework as reviewed
+
+### 7.4 Backend
+- Add `taklif` to `data-api` permissions (student: read own + insert, admin: read all + update status)
+
+---
+
+## 8. New Sidebar Order for Student Portal
+
+**New order:** Hesab > Payam > Nomrat > Jozveh > Akhbar > Taklif
+
+- Change `sidebarItems` array in Student.tsx
+- Change Payam-ha icon to `MessageSquare` (chat bubble)
+- Remove Pish Sabtenam from sidebar (moved to home page per item 4)
+
+---
+
+## 9. Static Sidebar (Fixed When Scrolling)
+
+Make sidebars sticky/fixed on both mobile and desktop:
+- Mobile: `sticky top-[96px] z-30 bg-card` so it stays visible when scrolling
+- Desktop: Already has `lg:sticky lg:top-24`
+- Apply to both Admin.tsx and Student.tsx sidebar `<aside>` elements
+
+---
+
+## 10. Expanded Subject List for Jozveh + Multi-Subject Selection
+
+**Expand `JOZVEH_SUBJECT_OPTIONS`** to include all 11 subjects:
+- علوم, ریاضی, تفکر, زبان, فارسی, دینی, قرآن, عربی, فیزیک, شیمی, زیست
+
+**Multi-grade selection:**
+- When creating a jozveh, admin can select multiple grades (or leave empty = all)
+- Add `target_grades text[]` column to jozveh table (similar to akhbar)
+- Update jozveh creation UI with grade toggle buttons (like akhbar)
+- Update Student.tsx jozveh fetching to match against the array
+
+---
+
+## 11. Gray Out Roles Tab
+
+In Admin.tsx sidebar rendering, the "roles" item gets:
+- `opacity-50 cursor-not-allowed pointer-events-none` classes
+- `onClick` is prevented (no-op)
+- Remains visible but clearly disabled/grayed out
+
+---
+
+## 12. Mobile Fixes
+
+Ensure all new tabs, sidebar changes, and features work properly on mobile:
+- Horizontal scrollbar sidebar with `scrollbar-hide`
+- Touch-friendly buttons and inputs
+- Responsive grids for taklif, parent portal, etc.
+
+---
 
 ## Technical Details
 
-### Database Migration (for item 7)
+### Database Migration
+
 ```sql
-CREATE TABLE public.pish_sabtenam (
+-- Add parent role
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'parent';
+
+-- Parent-student linking table
+CREATE TABLE public.parent_students (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  unit_number integer NOT NULL CHECK (unit_number BETWEEN 1 AND 3),
-  title text NOT NULL DEFAULT '',
-  content text NOT NULL DEFAULT '',
-  image_url text,
+  parent_id uuid NOT NULL,
+  student_id uuid NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(parent_id, student_id)
+);
+ALTER TABLE public.parent_students ENABLE ROW LEVEL SECURITY;
+
+-- Taklif (homework) table
+CREATE TABLE public.taklif (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL,
+  subject text NOT NULL,
+  file_url text NOT NULL,
+  file_name text NOT NULL,
+  grade text NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+ALTER TABLE public.taklif ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.pish_sabtenam ENABLE ROW LEVEL SECURITY;
+-- Seed @Modir account
+INSERT INTO public.custom_users (username, password_hash, full_name)
+VALUES ('@Modir', 'Jelve14041404', 'مدیر');
+INSERT INTO public.user_roles (user_id, role)
+SELECT id, 'admin' FROM public.custom_users WHERE username = '@Modir';
 
--- Seed the 3 units
-INSERT INTO public.pish_sabtenam (unit_number, title, content) VALUES
-  (1, 'دوره اول پسرانه', ''),
-  (2, 'دوره دوم پسرانه', ''),
-  (3, 'دوره دوم دخترانه', '');
+-- Add target_grades to jozveh
+ALTER TABLE public.jozveh ADD COLUMN IF NOT EXISTS target_grades text[] DEFAULT '{}'::text[];
 ```
 
 ### Edge Function Updates
-- `supabase/functions/data-api/index.ts`: Add `pish_sabtenam` table to permissions (admin read/write, student read). Add special handling for admin password updates using bcrypt hashing.
+- `data-api`: Add `taklif`, `parent_students` to permissions. Add modir check for admin account operations.
+- `auth-change-password`: Add modir check (requester username = `@Modir`) for changing admin passwords.
 
 ### Files Summary
 
 | File | Changes |
 |------|---------|
-| `src/components/ui/dialog.tsx` | Remove X close button |
-| `src/pages/Login.tsx` | Fix button: `gradient-primary` to `bg-primary` |
-| `src/pages/Contact.tsx` | Fix button: `gradient-primary` to `bg-primary` |
-| `src/pages/Admin.tsx` | Add edit user dialog, roles section, pish sabtenam management, akhbar image preview |
-| `src/pages/Student.tsx` | Add username editing, pish sabtenam tab, akhbar image popup |
-| `src/components/ChatPanel.tsx` | Improve avatar display in messages |
-| `src/pages/PishSabtenam.tsx` | New page for pre-registration info |
-| `src/App.tsx` | Add pish sabtenam routes |
-| `supabase/functions/data-api/index.ts` | Add pish_sabtenam permissions, admin password update |
-| Database migration | Create pish_sabtenam table |
-
+| `src/pages/Admin.tsx` | Account section, taklif tab, modir powers, grayed-out roles, expanded jozveh subjects, multi-grade jozveh |
+| `src/pages/Student.tsx` | New sidebar order, taklif tab, remove pish sabtenam tab, sticky sidebar |
+| `src/pages/Home.tsx` | Pish sabtenam buttons above school blocks |
+| `src/pages/Login.tsx` | Add parent role option |
+| `src/pages/Parent.tsx` | New parent portal page |
+| `src/components/ChatPanel.tsx` | Show avatar+name for all non-own messages (DM and group) |
+| `src/components/ui/sonner.tsx` | Configure top-center, 3s duration, RTL |
+| `src/components/RoleBasedHeader.tsx` | Add parent navigation |
+| `src/App.tsx` | Remove old Toaster, add parent route |
+| `src/lib/auth.ts` | Add parent to AuthSession role type |
+| `supabase/functions/data-api/index.ts` | Add taklif, parent_students permissions, modir admin management |
+| `supabase/functions/auth-change-password/index.ts` | Modir can change admin passwords |
+| All files using `useToast` | Replace with Sonner toast |
+| Database migration | parent role, parent_students table, taklif table, @Modir account, jozveh target_grades |
