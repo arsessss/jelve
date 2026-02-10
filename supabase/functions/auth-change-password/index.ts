@@ -66,6 +66,15 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'دسترسی غیرمجاز' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // Check if target is an admin - only @Modir can change admin passwords
+      const { data: targetRole } = await supabase.from('user_roles').select('role').eq('user_id', target_user_id).single();
+      if (targetRole?.role === 'admin') {
+        const { data: requesterUser } = await supabase.from('custom_users').select('username').eq('id', session.user_id).single();
+        if (requesterUser?.username !== '@Modir') {
+          return new Response(JSON.stringify({ error: 'فقط مدیر می‌تواند رمز عبور ادمین را تغییر دهد' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+
       if (new_password.length < 6) {
         return new Response(JSON.stringify({ error: 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }

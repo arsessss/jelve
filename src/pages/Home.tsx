@@ -1,9 +1,37 @@
 import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { SchoolBlock } from "@/components/SchoolBlock";
 import { Link } from "react-router-dom";
-import { Dumbbell } from "lucide-react";
+import { Dumbbell, ClipboardList } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+
+interface PishSabtenamData {
+  id: string;
+  unit_number: number;
+  title: string;
+  is_enabled: boolean;
+}
 
 const Home = () => {
+  const [pishData, setPishData] = useState<PishSabtenamData[]>([]);
+
+  useEffect(() => {
+    const fetchPish = async () => {
+      const { data } = await supabase.from("pish_sabtenam").select("id, unit_number, title, is_enabled");
+      if (data) setPishData(data.filter((p: PishSabtenamData) => p.is_enabled));
+    };
+    fetchPish();
+  }, []);
+
+  const getPishForUnit = (unit: number) => pishData.find(p => p.unit_number === unit);
+
+  const schoolBlocks = [
+    { title: "دوره اول پسرانه", description: "دوره ابتدایی با تمرکز بر پایه‌های آموزشی قوی و توسعه شخصیت", delay: 0, unit: 1 },
+    { title: "دوره دوم پسرانه", description: "دوره متوسطه با برنامه‌های آموزشی پیشرفته و هدفمند", delay: 200, unit: 2 },
+    { title: "دوره دوم دخترانه", description: "دوره متوسطه با محیطی امن، پرورشی و الهام‌بخش", delay: 400, unit: 3 },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
@@ -26,10 +54,7 @@ const Home = () => {
             >
               مجتمع آموزشی جلوه
             </h1>
-            <p 
-              className="text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed" 
-              dir="rtl"
-            >
+            <p className="text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed" dir="rtl">
               تربیت نسلی موفق با آموزش باکیفیت
             </p>
             <Link 
@@ -49,21 +74,26 @@ const Home = () => {
               واحدهای آموزشی
             </h2>
             <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-              <SchoolBlock 
-                title="دوره اول پسرانه" 
-                description="دوره ابتدایی با تمرکز بر پایه‌های آموزشی قوی و توسعه شخصیت" 
-                delay={0} 
-              />
-              <SchoolBlock 
-                title="دوره دوم پسرانه" 
-                description="دوره متوسطه با برنامه‌های آموزشی پیشرفته و هدفمند" 
-                delay={200} 
-              />
-              <SchoolBlock 
-                title="دوره دوم دخترانه" 
-                description="دوره متوسطه با محیطی امن، پرورشی و الهام‌بخش" 
-                delay={400} 
-              />
+              {schoolBlocks.map((block) => {
+                const pish = getPishForUnit(block.unit);
+                return (
+                  <div key={block.unit} className="flex flex-col gap-3">
+                    {pish && (
+                      <Link to={`/pish-sabtenam/${pish.unit_number}`}>
+                        <Button variant="outline" className="w-full gap-2 border-primary/50 text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300">
+                          <ClipboardList className="w-4 h-4" />
+                          {pish.title || "پیش ثبت‌نام"}
+                        </Button>
+                      </Link>
+                    )}
+                    <SchoolBlock 
+                      title={block.title} 
+                      description={block.description} 
+                      delay={block.delay} 
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>

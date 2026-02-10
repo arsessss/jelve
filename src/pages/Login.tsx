@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { customAuth } from "@/lib/auth";
 import { Lock, User, UserCog } from "lucide-react";
 
-type Role = "student" | "admin" | "";
+type Role = "student" | "admin" | "parent" | "";
 
 const Login = () => {
   const [username, setUsername] = useState("");
@@ -17,12 +17,11 @@ const Login = () => {
   const [selectedRole, setSelectedRole] = useState<Role>("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   useEffect(() => {
     const session = customAuth.getSession();
     if (session) {
-      navigate(session.role === "admin" ? "/admin" : session.role === "student" ? "/student" : "/");
+      navigate(session.role === "admin" ? "/admin" : session.role === "student" ? "/student" : session.role === "parent" ? "/parent" : "/");
     }
   }, [navigate]);
 
@@ -30,11 +29,7 @@ const Login = () => {
     e.preventDefault();
 
     if (!selectedRole) {
-      toast({
-        title: "خطا",
-        description: "لطفاً نوع کاربری خود را انتخاب کنید",
-        variant: "destructive",
-      });
+      toast.error("لطفاً نوع کاربری خود را انتخاب کنید");
       return;
     }
 
@@ -43,39 +38,31 @@ const Login = () => {
     const { session, error } = await customAuth.login(username, password);
 
     if (error) {
-      toast({
-        title: "خطا",
-        description: error,
-        variant: "destructive",
-      });
+      toast.error(error);
       setLoading(false);
       return;
     }
 
     if (session) {
-      // Verify that the user's actual role matches what they selected
       if (session.role !== selectedRole) {
-        toast({
-          title: "خطا",
-          description: selectedRole === "admin" 
-            ? "شما دسترسی ادمین ندارید" 
-            : "این حساب کاربری ادمین است",
-          variant: "destructive",
-        });
+        toast.error(selectedRole === "admin" 
+          ? "شما دسترسی ادمین ندارید" 
+          : selectedRole === "parent"
+          ? "این حساب کاربری والدین نیست"
+          : "این حساب کاربری دانش‌آموز نیست");
         customAuth.logout();
         setLoading(false);
         return;
       }
 
-      toast({
-        title: "خوش آمدید",
-        description: "ورود موفقیت‌آمیز بود",
-      });
+      toast.success("خوش آمدید");
 
       if (session.role === "admin") {
         navigate("/admin");
       } else if (session.role === "student") {
         navigate("/student");
+      } else if (session.role === "parent") {
+        navigate("/parent");
       } else {
         navigate("/");
       }
@@ -111,16 +98,9 @@ const Login = () => {
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="student" className="cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <span>دانش‌آموز</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="admin" className="cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <span>ادمین</span>
-                      </div>
-                    </SelectItem>
+                    <SelectItem value="student" className="cursor-pointer">دانش‌آموز</SelectItem>
+                    <SelectItem value="parent" className="cursor-pointer">والدین</SelectItem>
+                    <SelectItem value="admin" className="cursor-pointer">ادمین</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

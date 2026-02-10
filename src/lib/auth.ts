@@ -10,7 +10,7 @@ export interface CustomUser {
 export interface AuthSession {
   token: string;
   user: CustomUser;
-  role: "admin" | "student" | null;
+  role: "admin" | "student" | "parent" | null;
   expires_at: string;
 }
 

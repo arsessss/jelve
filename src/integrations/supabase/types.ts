@@ -248,6 +248,7 @@ export type Database = {
           id: string
           link: string
           subject: string
+          target_grades: string[] | null
           title: string
           updated_at: string
         }
@@ -258,6 +259,7 @@ export type Database = {
           id?: string
           link: string
           subject: string
+          target_grades?: string[] | null
           title: string
           updated_at?: string
         }
@@ -268,6 +270,7 @@ export type Database = {
           id?: string
           link?: string
           subject?: string
+          target_grades?: string[] | null
           title?: string
           updated_at?: string
         }
@@ -335,6 +338,27 @@ export type Database = {
           link?: string
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      parent_students: {
+        Row: {
+          created_at: string | null
+          id: string
+          parent_id: string
+          student_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          parent_id: string
+          student_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          parent_id?: string
+          student_id?: string
         }
         Relationships: []
       }
@@ -502,6 +526,42 @@ export type Database = {
         }
         Relationships: []
       }
+      taklif: {
+        Row: {
+          created_at: string | null
+          file_name: string
+          file_url: string
+          grade: string
+          id: string
+          status: string
+          student_id: string
+          subject: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          file_name: string
+          file_url: string
+          grade: string
+          id?: string
+          status?: string
+          student_id: string
+          subject: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string
+          file_url?: string
+          grade?: string
+          id?: string
+          status?: string
+          student_id?: string
+          subject?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -562,7 +622,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "student"
+      app_role: "admin" | "student" | "parent"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -690,7 +750,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "student"],
+      app_role: ["admin", "student", "parent"],
     },
   },
 } as const
