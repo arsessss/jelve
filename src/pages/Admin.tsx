@@ -162,9 +162,54 @@ const Admin = () => {
   const [taklifGradeFilter, setTaklifGradeFilter] = useState("all");
   const [taklifSubjectFilter, setTaklifSubjectFilter] = useState("all");
 
+  // Notification badges
+  const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({ messages: 0, chat: 0, taklif: 0 });
+  const lastSeenRef = useRef<Record<string, number>>({ messages: 0, chat: 0, taklif: 0 });
+
   // Parent linking (removed - now uses shomare meli)
 
   const navigate = useNavigate();
+
+  // Clear badge when viewing a tab
+  useEffect(() => {
+    if (activeSection === "messages" || activeSection === "chat" || activeSection === "taklif") {
+      const key = activeSection;
+      const currentTotal = key === "messages" ? messages.length : key === "taklif" ? taklifList.filter(t => t.status === "pending").length : 0;
+      lastSeenRef.current[key] = currentTotal;
+      setBadgeCounts(prev => ({ ...prev, [key]: 0 }));
+    }
+  }, [activeSection, messages.length, taklifList]);
+
+  // Update badges when data changes
+  useEffect(() => {
+    if (activeSection !== "messages") {
+      const diff = messages.length - lastSeenRef.current.messages;
+      if (diff > 0) setBadgeCounts(prev => ({ ...prev, messages: diff }));
+    }
+  }, [messages.length, activeSection]);
+
+  useEffect(() => {
+    const pendingCount = taklifList.filter(t => t.status === "pending").length;
+    if (activeSection !== "taklif") {
+      const diff = pendingCount - lastSeenRef.current.taklif;
+      if (diff > 0) setBadgeCounts(prev => ({ ...prev, taklif: diff }));
+    }
+  }, [taklifList, activeSection]);
+
+  // Realtime chat notifications
+  useEffect(() => {
+    if (!currentUserId) return;
+    const channel = supabase
+      .channel('admin-chat-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const msg = payload.new as { sender_id: string };
+        if (msg.sender_id !== currentUserId && activeSection !== "chat") {
+          setBadgeCounts(prev => ({ ...prev, chat: prev.chat + 1 }));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUserId, activeSection]);
 
   useEffect(() => { checkAuth(); }, []);
 
@@ -511,13 +556,18 @@ const Admin = () => {
                 <button
                   key={item.id}
                   onClick={() => !item.disabled && setActiveSection(item.id)}
-                  className={`flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg transition-all duration-300 whitespace-nowrap text-sm lg:text-base ${
+                  className={`relative flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg transition-all duration-300 whitespace-nowrap text-sm lg:text-base ${
                     item.disabled ? "opacity-50 cursor-not-allowed pointer-events-none" :
                     activeSection === item.id ? "bg-primary text-primary-foreground" : "bg-muted/50 hover:bg-muted text-foreground"
                   }`}
                 >
                   <item.icon className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
                   <span className="font-medium">{item.label}</span>
+                  {badgeCounts[item.id] > 0 && activeSection !== item.id && (
+                    <span className="absolute top-1 left-1 lg:top-1.5 lg:left-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
+                      {badgeCounts[item.id]}
+                    </span>
+                  )}
                 </button>
               ))}
               <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground text-destructive transition-all duration-300 whitespace-nowrap lg:mt-auto text-sm lg:text-base">
