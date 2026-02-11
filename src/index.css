@@ -339,6 +339,39 @@ All colors MUST be HSL.
   }
 }
 
+@keyframes badge-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes badge-fade-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+.badge-enter {
+  animation: badge-pop-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.badge-exit {
+  animation: badge-fade-out 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 /* Toast/notification animations */
 [data-sonner-toast] {
   animation: notification-slide-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
