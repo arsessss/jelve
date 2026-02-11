@@ -33,7 +33,9 @@ const PishSabtenam = () => {
         return;
       }
 
-      const { data: items, error } = await secureApi.select<PishSabtenamData>('pish_sabtenam', { unit_number: Number(id) });
+      const unitNum = parseInt(id || '', 10);
+      if (isNaN(unitNum)) { setLoading(false); return; }
+      const { data: items, error } = await secureApi.select<PishSabtenamData>('pish_sabtenam', { unit_number: unitNum });
       if (!error && items && items.length > 0) {
         setData(items[0]);
       }
