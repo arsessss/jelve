@@ -215,6 +215,10 @@ const Admin = () => {
 
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (newStudent.password.length < 6) {
+      toast.error("رمز عبور باید حداقل ۶ کاراکتر باشد");
+      return;
+    }
     setLoading(true);
     try {
       const { userId, error: authError } = await customAuth.createUser(newStudent.username, newStudent.password, newStudent.name, newStudent.role as "admin" | "student");
