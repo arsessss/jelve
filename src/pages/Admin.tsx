@@ -109,7 +109,7 @@ const Admin = () => {
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
   const [gradePeriods, setGradePeriods] = useState<GradePeriod[]>([]);
-  const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1", role: "student" as "student" | "admin" | "parent" });
+  const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1", role: "student" as "student" | "admin" | "parent", nationalId: "" });
   const [newClass, setNewClass] = useState({ grade: "7/1", title: "", link: "" });
   const [newJozveh, setNewJozveh] = useState({ grade: "7/1", subject: "olom", title: "", targetGrades: [] as string[] });
   const [jozvehFile, setJozvehFile] = useState<File | null>(null);
@@ -162,9 +162,7 @@ const Admin = () => {
   const [taklifGradeFilter, setTaklifGradeFilter] = useState("all");
   const [taklifSubjectFilter, setTaklifSubjectFilter] = useState("all");
 
-  // Parent linking
-  const [linkParentId, setLinkParentId] = useState("");
-  const [linkStudentId, setLinkStudentId] = useState("");
+  // Parent linking (removed - now uses shomare meli)
 
   const navigate = useNavigate();
 
@@ -219,23 +217,40 @@ const Admin = () => {
       toast.error("رمز عبور باید حداقل ۶ کاراکتر باشد");
       return;
     }
+    if ((newStudent.role === "student" || newStudent.role === "parent") && !newStudent.nationalId.trim()) {
+      toast.error("شماره ملی الزامی است");
+      return;
+    }
     setLoading(true);
     try {
+      // For parent, check that a student with matching national ID exists first
+      if (newStudent.role === "parent") {
+        const { data: matchingStudents } = await secureApi.select<Student>('students', { student_id: newStudent.nationalId.trim() });
+        if (!matchingStudents || matchingStudents.length === 0) {
+          toast.error("دانش‌آموزی با این شماره ملی یافت نشد");
+          setLoading(false);
+          return;
+        }
+      }
+
       const { userId, error: authError } = await customAuth.createUser(newStudent.username, newStudent.password, newStudent.name, newStudent.role as "admin" | "student");
       if (authError) { toast.error(authError); setLoading(false); return; }
       if (userId) {
         if (newStudent.role === "student") {
-          const { error } = await secureApi.insert('students', { user_id: userId, full_name: newStudent.name, grade: newStudent.grade });
+          const { error } = await secureApi.insert('students', { user_id: userId, full_name: newStudent.name, grade: newStudent.grade, student_id: newStudent.nationalId.trim() });
           if (error) { toast.error(error); setLoading(false); return; }
         }
-        // For parent role, we need to set the role separately since createUser only handles admin/student
         if (newStudent.role === "parent") {
-          // The user was created with a dummy role, update it
-          // Actually createUser in auth-signup handles the role, but it only accepts admin|student
-          // For parent, we'll update the role after creation
+          // Auto-link parent to student(s) with matching national ID
+          const { data: matchingStudents } = await secureApi.select<Student>('students', { student_id: newStudent.nationalId.trim() });
+          if (matchingStudents) {
+            for (const student of matchingStudents) {
+              await secureApi.insert('parent_students', { parent_id: userId, student_id: student.id });
+            }
+          }
         }
         toast.success(newStudent.role === "admin" ? "ادمین ایجاد شد" : newStudent.role === "parent" ? "حساب والدین ایجاد شد" : "دانش‌آموز ایجاد شد");
-        setNewStudent({ name: "", username: "", password: "", grade: "7/1", role: "student" });
+        setNewStudent({ name: "", username: "", password: "", grade: "7/1", role: "student", nationalId: "" });
         if (newStudent.role === "student") fetchStudents(); else fetchAdminUsers();
       }
     } catch (error: unknown) {
@@ -470,12 +485,6 @@ const Admin = () => {
 
   const getStudentName = (studentId: string) => students.find(s => s.id === studentId)?.full_name || "ناشناس";
 
-  // Link parent to student
-  const handleLinkParent = async () => {
-    if (!linkParentId.trim() || !linkStudentId.trim()) { toast.error("هر دو فیلد الزامی است"); return; }
-    const { error } = await secureApi.insert('parent_students', { parent_id: linkParentId, student_id: linkStudentId });
-    if (error) toast.error(error); else { toast.success("والدین متصل شد"); setLinkParentId(""); setLinkStudentId(""); }
-  };
 
   const sidebarItems = [
     { id: "main" as ActiveSection, icon: Home, label: "صفحه اصلی" },
@@ -578,18 +587,11 @@ const Admin = () => {
                         <SelectContent>{GRADE_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent>
                       </Select>
                     )}
+                    {(newStudent.role === "student" || newStudent.role === "parent") && (
+                      <Input placeholder="شماره ملی" value={newStudent.nationalId} onChange={e => setNewStudent({ ...newStudent, nationalId: e.target.value })} required className="text-right" dir="ltr" />
+                    )}
                     <Button type="submit" disabled={loading}>{loading ? "..." : "ایجاد"}</Button>
                   </form>
-                </Card>
-
-                {/* Link Parent to Student */}
-                <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5" /> اتصال والدین به دانش‌آموز</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Input placeholder="شناسه والدین (UUID)" value={linkParentId} onChange={e => setLinkParentId(e.target.value)} className="text-right" dir="ltr" />
-                    <Input placeholder="شناسه دانش‌آموز (UUID)" value={linkStudentId} onChange={e => setLinkStudentId(e.target.value)} className="text-right" dir="ltr" />
-                    <Button onClick={handleLinkParent}>اتصال</Button>
-                  </div>
                 </Card>
 
                 {/* Admin list */}
