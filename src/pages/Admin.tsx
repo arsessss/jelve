@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,8 @@ import { secureApi } from "@/lib/secure-api";
 import { useAkhbar, renderFormattedText, Akhbar } from "@/hooks/use-akhbar";
 import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye, User, Lock, Download } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
+import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
+import { playNotificationSound } from "@/lib/notification-sound";
 
 interface Student {
   id: string;
@@ -165,26 +167,39 @@ const Admin = () => {
   // Notification badges
   const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({ messages: 0, chat: 0, taklif: 0 });
   const lastSeenRef = useRef<Record<string, number>>({ messages: 0, chat: 0, taklif: 0 });
+  const [fadingBadges, setFadingBadges] = useState<Record<string, boolean>>({});
 
-  // Parent linking (removed - now uses shomare meli)
+  const confirm = useConfirm();
 
   const navigate = useNavigate();
 
-  // Clear badge when viewing a tab
+  // Clear badge when viewing a tab (with fade-out)
   useEffect(() => {
     if (activeSection === "messages" || activeSection === "chat" || activeSection === "taklif") {
       const key = activeSection;
-      const currentTotal = key === "messages" ? messages.length : key === "taklif" ? taklifList.filter(t => t.status === "pending").length : 0;
-      lastSeenRef.current[key] = currentTotal;
-      setBadgeCounts(prev => ({ ...prev, [key]: 0 }));
+      if (badgeCounts[key] > 0) {
+        setFadingBadges(prev => ({ ...prev, [key]: true }));
+        setTimeout(() => {
+          const currentTotal = key === "messages" ? messages.length : key === "taklif" ? taklifList.filter(t => t.status === "pending").length : 0;
+          lastSeenRef.current[key] = currentTotal;
+          setBadgeCounts(prev => ({ ...prev, [key]: 0 }));
+          setFadingBadges(prev => ({ ...prev, [key]: false }));
+        }, 300);
+      } else {
+        const currentTotal = key === "messages" ? messages.length : key === "taklif" ? taklifList.filter(t => t.status === "pending").length : 0;
+        lastSeenRef.current[key] = currentTotal;
+      }
     }
-  }, [activeSection, messages.length, taklifList]);
+  }, [activeSection]);
 
   // Update badges when data changes
   useEffect(() => {
     if (activeSection !== "messages") {
       const diff = messages.length - lastSeenRef.current.messages;
-      if (diff > 0) setBadgeCounts(prev => ({ ...prev, messages: diff }));
+      if (diff > 0) {
+        setBadgeCounts(prev => ({ ...prev, messages: diff }));
+        playNotificationSound();
+      }
     }
   }, [messages.length, activeSection]);
 
@@ -192,7 +207,10 @@ const Admin = () => {
     const pendingCount = taklifList.filter(t => t.status === "pending").length;
     if (activeSection !== "taklif") {
       const diff = pendingCount - lastSeenRef.current.taklif;
-      if (diff > 0) setBadgeCounts(prev => ({ ...prev, taklif: diff }));
+      if (diff > 0) {
+        setBadgeCounts(prev => ({ ...prev, taklif: diff }));
+        playNotificationSound();
+      }
     }
   }, [taklifList, activeSection]);
 
@@ -205,6 +223,7 @@ const Admin = () => {
         const msg = payload.new as { sender_id: string };
         if (msg.sender_id !== currentUserId && activeSection !== "chat") {
           setBadgeCounts(prev => ({ ...prev, chat: prev.chat + 1 }));
+          playNotificationSound();
         }
       })
       .subscribe();
@@ -251,7 +270,7 @@ const Admin = () => {
   const handleLogout = () => { customAuth.logout(); navigate("/login"); };
 
   const deleteMessage = async (id: string) => {
-    if (!confirm("آیا از حذف این پیام اطمینان دارید؟")) return;
+    if (!(await confirm("آیا از حذف این پیام اطمینان دارید؟"))) return;
     const { error } = await secureApi.delete('contact_messages', id);
     if (error) toast.error("حذف پیام ناموفق بود"); else { toast.success("پیام حذف شد"); fetchMessages(); }
   };
@@ -304,7 +323,7 @@ const Admin = () => {
   };
 
   const deleteStudent = async (studentId: string, userId: string) => {
-    if (!confirm("آیا از حذف اطمینان دارید؟")) return;
+    if (!(await confirm("آیا از حذف اطمینان دارید؟"))) return;
     try {
       await secureApi.delete('students', studentId);
       await secureApi.delete('custom_users', userId);
@@ -314,7 +333,7 @@ const Admin = () => {
   };
 
   const deleteAdminUser = async (adminUser: AdminUser) => {
-    if (!confirm(`آیا از حذف ادمین ${adminUser.full_name || adminUser.username} اطمینان دارید؟`)) return;
+    if (!(await confirm(`آیا از حذف ادمین ${adminUser.full_name || adminUser.username} اطمینان دارید؟`))) return;
     try {
       // Delete role first, then user
       const { data: roles } = await secureApi.select<{ id: string; user_id: string }>('user_roles', { user_id: adminUser.id });
@@ -386,7 +405,7 @@ const Admin = () => {
   };
 
   const deleteGradePeriod = async (periodId: string) => {
-    if (!confirm("آیا از حذف اطمینان دارید؟")) return;
+    if (!(await confirm("آیا از حذف اطمینان دارید؟"))) return;
     const { data: grades } = await secureApi.select<StudentPeriodGrade>('student_period_grades', { period_id: periodId });
     if (grades) { for (const g of grades) await secureApi.delete('student_period_grades', g.id); }
     const { error } = await secureApi.delete('grade_periods', periodId);
@@ -423,7 +442,7 @@ const Admin = () => {
   };
 
   const deleteOnlineClass = async (id: string) => {
-    if (!confirm("حذف؟")) return;
+    if (!(await confirm("حذف؟"))) return;
     const { error } = await secureApi.delete('online_classes', id);
     if (error) toast.error("خطا"); else { toast.success("حذف شد"); fetchOnlineClasses(); }
   };
@@ -454,7 +473,7 @@ const Admin = () => {
   };
 
   const deleteJozveh = async (id: string) => {
-    if (!confirm("حذف؟")) return;
+    if (!(await confirm("حذف؟"))) return;
     const { error } = await secureApi.delete('jozveh', id);
     if (error) toast.error("خطا"); else { toast.success("حذف شد"); fetchJozveh(); }
   };
@@ -474,7 +493,7 @@ const Admin = () => {
     setAkhbarLoading(false);
   };
 
-  const handleDeleteAkhbar = async (id: string) => { if (!confirm("حذف؟")) return; await deleteAkhbar(id); };
+  const handleDeleteAkhbar = async (id: string) => { if (!(await confirm("حذف؟"))) return; await deleteAkhbar(id); };
   const toggleGradeInAkhbar = (grade: string) => setNewAkhbar(prev => ({ ...prev, targetGrades: prev.targetGrades.includes(grade) ? prev.targetGrades.filter(g => g !== grade) : [...prev.targetGrades, grade] }));
   const toggleGradeInJozveh = (grade: string) => setNewJozveh(prev => ({ ...prev, targetGrades: prev.targetGrades.includes(grade) ? prev.targetGrades.filter(g => g !== grade) : [...prev.targetGrades, grade] }));
   const handleAkhbarImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0] || null; setAkhbarImage(file); setAkhbarImagePreview(file ? URL.createObjectURL(file) : null); };
@@ -546,6 +565,8 @@ const Admin = () => {
   ];
 
   return (
+    <>
+    <ConfirmDialog />
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       <main className="pt-24 pb-12">
@@ -563,9 +584,9 @@ const Admin = () => {
                 >
                   <item.icon className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
                   <span className="font-medium">{item.label}</span>
-                  {badgeCounts[item.id] > 0 && activeSection !== item.id && (
-                    <span className="absolute top-1 left-1 lg:top-1.5 lg:left-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
-                      {badgeCounts[item.id]}
+                  {(badgeCounts[item.id] > 0 || fadingBadges[item.id]) && (
+                    <span className={`absolute top-1 left-1 lg:top-1.5 lg:left-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 ${fadingBadges[item.id] ? 'badge-exit' : 'badge-enter'}`}>
+                      {badgeCounts[item.id] || ""}
                     </span>
                   )}
                 </button>
@@ -954,6 +975,7 @@ const Admin = () => {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 };
 export default Admin;
