@@ -159,8 +159,8 @@ const Admin = () => {
 
   // Taklif
   const [taklifList, setTaklifList] = useState<TaklifData[]>([]);
-  const [taklifGradeFilter, setTaklifGradeFilter] = useState("");
-  const [taklifSubjectFilter, setTaklifSubjectFilter] = useState("");
+  const [taklifGradeFilter, setTaklifGradeFilter] = useState("all");
+  const [taklifSubjectFilter, setTaklifSubjectFilter] = useState("all");
 
   // Parent linking
   const [linkParentId, setLinkParentId] = useState("");
@@ -459,8 +459,8 @@ const Admin = () => {
   };
 
   const filteredTaklif = taklifList.filter(t => {
-    if (taklifGradeFilter && t.grade !== taklifGradeFilter) return false;
-    if (taklifSubjectFilter && t.subject !== taklifSubjectFilter) return false;
+    if (taklifGradeFilter !== "all" && t.grade !== taklifGradeFilter) return false;
+    if (taklifSubjectFilter !== "all" && t.subject !== taklifSubjectFilter) return false;
     return true;
   });
 
@@ -753,11 +753,11 @@ const Admin = () => {
                   <div className="flex flex-wrap gap-4 mb-4">
                     <Select value={taklifGradeFilter} onValueChange={setTaklifGradeFilter}>
                       <SelectTrigger className="w-40"><SelectValue placeholder="همه پایه‌ها" /></SelectTrigger>
-                      <SelectContent><SelectItem value="">همه</SelectItem>{GRADE_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent>
+                      <SelectContent><SelectItem value="all">همه</SelectItem>{GRADE_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent>
                     </Select>
                     <Select value={taklifSubjectFilter} onValueChange={setTaklifSubjectFilter}>
                       <SelectTrigger className="w-40"><SelectValue placeholder="همه دروس" /></SelectTrigger>
-                      <SelectContent><SelectItem value="">همه</SelectItem>{SUBJECT_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                      <SelectContent><SelectItem value="all">همه</SelectItem>{SUBJECT_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   {filteredTaklif.length === 0 ? (
