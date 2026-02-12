@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -13,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { useAkhbar, renderFormattedText, Akhbar } from "@/hooks/use-akhbar";
-import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye, User, Lock, Download } from "lucide-react";
+import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye, User, Lock, Download, Camera, Pencil } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { playNotificationSound } from "@/lib/notification-sound";
@@ -29,6 +30,12 @@ interface AdminUser {
   id: string;
   username: string;
   full_name: string | null;
+}
+interface CustomUserData {
+  id: string;
+  username: string;
+  full_name: string | null;
+  profile_picture: string | null;
 }
 interface GradePeriod {
   id: string;
@@ -101,6 +108,12 @@ const JOZVEH_SUBJECT_OPTIONS = [
   { value: "shimi", label: "شیمی" }, { value: "zist", label: "زیست" },
 ];
 
+const IMAGE_SIZE_OPTIONS = [
+  { value: "small", label: "کوچک" },
+  { value: "medium", label: "متوسط" },
+  { value: "large", label: "بزرگ" },
+];
+
 type ActiveSection = "main" | "users" | "classes" | "jozveh" | "messages" | "chat" | "akhbar" | "roles" | "pish_sabtenam" | "account" | "taklif";
 
 const Admin = () => {
@@ -120,9 +133,14 @@ const Admin = () => {
   const [activeSection, setActiveSection] = useState<ActiveSection>("main");
   const [isModir, setIsModir] = useState(false);
 
+  // User data for account section
+  const [userData, setUserData] = useState<CustomUserData | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const profileFileRef = useRef<HTMLInputElement>(null);
+
   // Akhbar state
   const { akhbarList, createAkhbar, deleteAkhbar, uploadImage, refetch: refetchAkhbar } = useAkhbar();
-  const [newAkhbar, setNewAkhbar] = useState({ title: "", content: "", targetGrades: [] as string[], isPublished: true });
+  const [newAkhbar, setNewAkhbar] = useState({ title: "", content: "", targetGrades: [] as string[], isPublished: true, imageSize: "large" });
   const [akhbarImage, setAkhbarImage] = useState<File | null>(null);
   const akhbarImageRef = useRef<HTMLInputElement>(null);
   const [akhbarLoading, setAkhbarLoading] = useState(false);
@@ -241,6 +259,7 @@ const Admin = () => {
     setCurrentUserId(session.user.id);
     setIsModir(session.user.username === "@Modir");
     fetchMessages(); fetchStudents(); fetchAdminUsers(); fetchOnlineClasses(); fetchJozveh(); fetchGradePeriods(); fetchPishSabtenam(); fetchTaklif();
+    fetchUserData(session.user.id);
   };
 
   const fetchMessages = async () => { const { data } = await secureApi.select<ContactMessage>('contact_messages'); if (data) setMessages(data); };
@@ -258,6 +277,7 @@ const Admin = () => {
   const fetchGradePeriods = async () => { const { data } = await secureApi.select<GradePeriod>('grade_periods'); if (data) setGradePeriods(data); };
   const fetchPishSabtenam = async () => { const { data } = await secureApi.select<PishSabtenamData>('pish_sabtenam'); if (data) setPishSabtenamList(data.sort((a, b) => a.unit_number - b.unit_number)); };
   const fetchTaklif = async () => { const { data } = await secureApi.select<TaklifData>('taklif'); if (data) setTaklifList(data); };
+  const fetchUserData = async (userId: string) => { const { data } = await secureApi.select<CustomUserData>('custom_users', { id: userId }); if (data && data.length > 0) setUserData(data[0]); };
   const fetchStudentPeriodGrades = async (studentId: string, periodId: string) => {
     const { data } = await secureApi.select<StudentPeriodGrade>('student_period_grades', { student_id: studentId, period_id: periodId });
     if (data) {
@@ -287,7 +307,6 @@ const Admin = () => {
     }
     setLoading(true);
     try {
-      // For parent, check that a student with matching national ID exists first
       if (newStudent.role === "parent") {
         const { data: matchingStudents } = await secureApi.select<Student>('students', { student_id: newStudent.nationalId.trim() });
         if (!matchingStudents || matchingStudents.length === 0) {
@@ -305,7 +324,6 @@ const Admin = () => {
           if (error) { toast.error(error); setLoading(false); return; }
         }
         if (newStudent.role === "parent") {
-          // Auto-link parent to student(s) with matching national ID
           const { data: matchingStudents } = await secureApi.select<Student>('students', { student_id: newStudent.nationalId.trim() });
           if (matchingStudents) {
             for (const student of matchingStudents) {
@@ -335,7 +353,6 @@ const Admin = () => {
   const deleteAdminUser = async (adminUser: AdminUser) => {
     if (!(await confirm(`آیا از حذف ادمین ${adminUser.full_name || adminUser.username} اطمینان دارید؟`))) return;
     try {
-      // Delete role first, then user
       const { data: roles } = await secureApi.select<{ id: string; user_id: string }>('user_roles', { user_id: adminUser.id });
       if (roles) {
         for (const role of roles) {
@@ -488,8 +505,8 @@ const Admin = () => {
     setAkhbarLoading(true);
     let imageUrl: string | null = null;
     if (akhbarImage) imageUrl = await uploadImage(akhbarImage);
-    const success = await createAkhbar(newAkhbar.title, newAkhbar.content, imageUrl, newAkhbar.targetGrades, newAkhbar.isPublished, currentUserId);
-    if (success) { setNewAkhbar({ title: "", content: "", targetGrades: [], isPublished: true }); setAkhbarImage(null); setAkhbarImagePreview(null); }
+    const success = await createAkhbar(newAkhbar.title, newAkhbar.content, imageUrl, newAkhbar.targetGrades, newAkhbar.isPublished, currentUserId, newAkhbar.imageSize);
+    if (success) { setNewAkhbar({ title: "", content: "", targetGrades: [], isPublished: true, imageSize: "large" }); setAkhbarImage(null); setAkhbarImagePreview(null); }
     setAkhbarLoading(false);
   };
 
@@ -513,7 +530,12 @@ const Admin = () => {
       toast.success("ذخیره شد"); setEditingPish(null); fetchPishSabtenam();
     } catch { toast.error("خطا"); } finally { setPishLoading(false); }
   };
-  const togglePishEnabled = async (pish: PishSabtenamData) => { await secureApi.update('pish_sabtenam', pish.id, { is_enabled: !pish.is_enabled }); fetchPishSabtenam(); };
+  const togglePishEnabled = async (pish: PishSabtenamData) => {
+    const newVal = !pish.is_enabled;
+    await secureApi.update('pish_sabtenam', pish.id, { is_enabled: newVal });
+    toast.success(newVal ? "فعال شد" : "غیرفعال شد");
+    fetchPishSabtenam();
+  };
 
   // Account handlers
   const handlePasswordChange = async () => {
@@ -533,12 +555,35 @@ const Admin = () => {
     setChangingUsername(false);
     if (error) { toast.error(error); return; }
     toast.success("نام کاربری تغییر کرد"); setNewUsername("");
+    fetchUserData(currentUserId || '');
+  };
+
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("فقط تصویر مجاز است"); return; }
+    setUploading(true);
+    try {
+      const fileName = `${currentUserId}-${Date.now()}.${file.name.split(".").pop()}`;
+      const { error } = await supabase.storage.from("profile-pictures").upload(fileName, file, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
+      await secureApi.update('custom_users', currentUserId || '', { profile_picture: urlData.publicUrl });
+      setUserData(prev => prev ? { ...prev, profile_picture: urlData.publicUrl } : null);
+      toast.success("تصویر آپلود شد");
+    } catch { toast.error("خطا در آپلود"); }
+    finally { setUploading(false); }
   };
 
   // Taklif handlers
   const updateTaklifStatus = async (id: string, status: string) => {
     const { error } = await secureApi.update('taklif', id, { status });
     if (error) toast.error("خطا"); else { toast.success("وضعیت تغییر کرد"); fetchTaklif(); }
+  };
+
+  const deleteTaklif = async (id: string) => {
+    if (!(await confirm("آیا از حذف تکلیف اطمینان دارید؟"))) return;
+    const { error } = await secureApi.delete('taklif', id);
+    if (error) toast.error("خطا"); else { toast.success("حذف شد"); fetchTaklif(); }
   };
 
   const filteredTaklif = taklifList.filter(t => {
@@ -549,6 +594,14 @@ const Admin = () => {
 
   const getStudentName = (studentId: string) => students.find(s => s.id === studentId)?.full_name || "ناشناس";
 
+  const getImageSizeClass = (size: string) => {
+    switch (size) {
+      case "small": return "max-h-24 max-w-[120px]";
+      case "medium": return "max-h-48 max-w-[300px]";
+      case "large": return "w-full max-h-64";
+      default: return "w-full max-h-48";
+    }
+  };
 
   const sidebarItems = [
     { id: "main" as ActiveSection, icon: Home, label: "صفحه اصلی" },
@@ -603,34 +656,96 @@ const Admin = () => {
               <div className="space-y-6 animate-fade-in">
                 <h1 className="text-2xl font-bold">پنل مدیریت</h1>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="p-4 lg:p-6 border-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><GraduationCap className="w-5 h-5 text-primary" /></div><div><p className="text-xl font-bold">{students.length}</p><p className="text-xs text-muted-foreground">دانش‌آموز</p></div></div></Card>
-                  <Card className="p-4 lg:p-6 border-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center"><ShieldCheck className="w-5 h-5 text-accent" /></div><div><p className="text-xl font-bold">{adminUsers.length}</p><p className="text-xs text-muted-foreground">ادمین</p></div></div></Card>
-                  <Card className="p-4 lg:p-6 border-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><Video className="w-5 h-5 text-primary" /></div><div><p className="text-xl font-bold">{onlineClasses.length}</p><p className="text-xs text-muted-foreground">کلاس</p></div></div></Card>
-                  <Card className="p-4 lg:p-6 border-2"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center"><MessageSquare className="w-5 h-5 text-accent" /></div><div><p className="text-xl font-bold">{messages.length}</p><p className="text-xs text-muted-foreground">پیام</p></div></div></Card>
+                  <Card className="p-4 lg:p-6 border-2 cursor-pointer hover:border-primary/50 transition-all" onClick={() => setActiveSection("users")}>
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><GraduationCap className="w-5 h-5 text-primary" /></div><div><p className="text-xl font-bold">{students.length}</p><p className="text-xs text-muted-foreground">دانش‌آموز</p></div></div>
+                  </Card>
+                  <Card className="p-4 lg:p-6 border-2 cursor-pointer hover:border-primary/50 transition-all" onClick={() => setActiveSection("users")}>
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center"><ShieldCheck className="w-5 h-5 text-accent" /></div><div><p className="text-xl font-bold">{adminUsers.length}</p><p className="text-xs text-muted-foreground">ادمین</p></div></div>
+                  </Card>
+                  <Card className="p-4 lg:p-6 border-2 cursor-pointer hover:border-primary/50 transition-all" onClick={() => setActiveSection("messages")}>
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><MessageSquare className="w-5 h-5 text-primary" /></div><div><p className="text-xl font-bold">{messages.length}</p><p className="text-xs text-muted-foreground">پیام</p></div></div>
+                  </Card>
+                  <Card className="p-4 lg:p-6 border-2 cursor-pointer hover:border-primary/50 transition-all" onClick={() => setActiveSection("taklif")}>
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center"><BookOpen className="w-5 h-5 text-accent" /></div><div><p className="text-xl font-bold">{taklifList.filter(t => t.status === "pending").length}</p><p className="text-xs text-muted-foreground">تکلیف جدید</p></div></div>
+                  </Card>
+                </div>
+                {/* Quick notifications */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {messages.length > 0 && (
+                    <Card className="p-6 border-2">
+                      <h3 className="text-lg font-bold mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" /> آخرین پیام‌ها</h3>
+                      <div className="space-y-2">
+                        {messages.slice(0, 3).map(msg => (
+                          <div key={msg.id} className="p-3 bg-muted/50 rounded-lg border border-border">
+                            <div className="flex justify-between items-start"><span className="font-medium text-sm">{msg.name}</span><span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleDateString('fa-IR')}</span></div>
+                            <p className="text-sm text-muted-foreground line-clamp-1 mt-1">{msg.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => setActiveSection("messages")}>مشاهده همه</Button>
+                    </Card>
+                  )}
+                  {taklifList.filter(t => t.status === "pending").length > 0 && (
+                    <Card className="p-6 border-2">
+                      <h3 className="text-lg font-bold mb-3 flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" /> تکالیف جدید</h3>
+                      <div className="space-y-2">
+                        {taklifList.filter(t => t.status === "pending").slice(0, 3).map(t => (
+                          <div key={t.id} className="p-3 bg-muted/50 rounded-lg border border-border">
+                            <div className="flex justify-between items-start"><span className="font-medium text-sm">{getStudentName(t.student_id)}</span><span className="text-xs text-muted-foreground">{getSubjectLabel(t.subject)}</span></div>
+                            <p className="text-xs text-muted-foreground mt-1">پایه: {getGradeLabel(t.grade)}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => setActiveSection("taklif")}>مشاهده همه</Button>
+                    </Card>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Account */}
+            {/* Account - styled like student account */}
             {activeSection === "account" && (
               <div className="space-y-6 animate-fade-in">
-                <h1 className="text-2xl font-bold flex items-center gap-3"><User className="w-8 h-8 text-primary" /> حساب کاربری</h1>
+                <h1 className="text-2xl font-bold">حساب کاربری</h1>
                 <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Lock className="w-5 h-5" /> تغییر رمز عبور</h3>
-                  <div className="space-y-3 max-w-md">
-                    <Input type="password" placeholder="رمز فعلی" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="text-right" />
-                    <Input type="password" placeholder="رمز جدید" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="text-right" />
-                    <Input type="password" placeholder="تکرار رمز جدید" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="text-right" />
-                    <Button onClick={handlePasswordChange} disabled={changingPassword}>{changingPassword ? "..." : "ذخیره رمز"}</Button>
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <div className="relative">
+                      <Avatar className="w-24 h-24 border-4 border-border">
+                        <AvatarImage src={userData?.profile_picture || undefined} />
+                        <AvatarFallback><User className="w-12 h-12 text-muted-foreground" /></AvatarFallback>
+                      </Avatar>
+                      <input type="file" ref={profileFileRef} onChange={handleProfilePictureUpload} accept="image/*" className="hidden" />
+                      <Button variant="outline" size="icon" onClick={() => profileFileRef.current?.click()} disabled={uploading} className="absolute -bottom-2 -right-2 rounded-full w-8 h-8">
+                        <Camera className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="text-center sm:text-right">
+                      <h2 className="text-2xl font-bold">{userData?.full_name || "ادمین"}</h2>
+                      <p className="text-muted-foreground">@{userData?.username}</p>
+                      <p className="text-muted-foreground text-sm">مدیر سیستم</p>
+                    </div>
                   </div>
                 </Card>
-                <Card className="p-6 border-2">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Edit2 className="w-5 h-5" /> تغییر نام کاربری</h3>
-                  <div className="flex gap-2 max-w-md">
-                    <Input placeholder="نام کاربری جدید" value={newUsername} onChange={e => setNewUsername(e.target.value)} className="flex-1 text-right" />
-                    <Button onClick={handleUsernameChange} disabled={changingUsername || !newUsername.trim()}>{changingUsername ? "..." : "تغییر"}</Button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Card className="p-6 border-2">
+                    <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center"><Lock className="w-6 h-6 text-primary" /></div><h3 className="font-bold">تغییر رمز عبور</h3></div>
+                    <div className="space-y-3">
+                      <Input type="password" placeholder="رمز فعلی" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="text-right" />
+                      <Input type="password" placeholder="رمز جدید" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="text-right" />
+                      <Input type="password" placeholder="تکرار رمز جدید" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="text-right" />
+                      <Button onClick={handlePasswordChange} disabled={changingPassword} className="w-full">{changingPassword ? "..." : "ذخیره رمز"}</Button>
+                    </div>
+                  </Card>
+                  <div className="space-y-4">
+                    <Card className="p-6 border-2">
+                      <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center"><Pencil className="w-6 h-6 text-accent" /></div><h3 className="font-bold">تغییر نام کاربری</h3></div>
+                      <div className="flex gap-2"><Input placeholder="نام کاربری جدید" value={newUsername} onChange={e => setNewUsername(e.target.value)} className="flex-1 text-right" /><Button onClick={handleUsernameChange} disabled={changingUsername || !newUsername.trim()}>{changingUsername ? "..." : "تغییر"}</Button></div>
+                    </Card>
+                    <Card className="p-6 border-2 cursor-pointer hover:border-primary/50 transition-all" onClick={() => profileFileRef.current?.click()}>
+                      <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center"><Camera className="w-6 h-6 text-primary" /></div><div><h3 className="font-bold">ویرایش تصویر پروفایل</h3><p className="text-sm text-muted-foreground">کلیک کنید برای آپلود تصویر</p></div></div>
+                    </Card>
                   </div>
-                </Card>
+                </div>
               </div>
             )}
 
@@ -797,6 +912,16 @@ const Admin = () => {
                       {akhbarImagePreview && <img src={akhbarImagePreview} alt="preview" className="w-full max-h-48 object-contain rounded" />}
                     </div>
                     <div className="space-y-2">
+                      <label className="text-sm font-medium">اندازه تصویر</label>
+                      <div className="flex gap-2">
+                        {IMAGE_SIZE_OPTIONS.map(opt => (
+                          <Button key={opt.value} type="button" variant={newAkhbar.imageSize === opt.value ? "default" : "outline"} size="sm" onClick={() => setNewAkhbar({ ...newAkhbar, imageSize: opt.value })}>
+                            {opt.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
                       <label className="text-sm font-medium">پایه‌ها (خالی = همه)</label>
                       <div className="flex flex-wrap gap-2">{GRADE_OPTIONS.map(g => <Button key={g.value} type="button" variant={newAkhbar.targetGrades.includes(g.value) ? "default" : "outline"} size="sm" onClick={() => toggleGradeInAkhbar(g.value)}>{g.label}</Button>)}</div>
                     </div>
@@ -813,7 +938,7 @@ const Admin = () => {
                           <div className="flex-1"><h4 className="font-bold text-lg">{item.title}</h4><p className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleDateString('fa-IR')}{!item.is_published && " | پیش‌نویس"}{item.target_grades.length > 0 && ` | ${item.target_grades.join(', ')}`}</p></div>
                           <Button variant="destructive" size="icon" onClick={() => handleDeleteAkhbar(item.id)}><Trash2 className="w-4 h-4" /></Button>
                         </div>
-                        {item.image_url && <img src={item.image_url} alt={item.title} className="w-full max-h-48 object-contain rounded-lg mb-3" />}
+                        {item.image_url && <img src={item.image_url} alt={item.title} className={`${getImageSizeClass((item as any).image_size || "large")} object-contain rounded-lg mb-3`} />}
                         <p className="text-sm whitespace-pre-wrap">{renderFormattedText(item.content)}</p>
                       </div>
                     ))}
@@ -851,6 +976,7 @@ const Admin = () => {
                           <div className="flex gap-2">
                             <a href={t.file_url} target="_blank" rel="noopener noreferrer"><Button variant="outline" size="sm" className="gap-1"><Download className="w-3 h-3" /> دانلود</Button></a>
                             {t.status !== 'reviewed' && <Button size="sm" onClick={() => updateTaklifStatus(t.id, 'reviewed')}>بررسی شد</Button>}
+                            <Button variant="destructive" size="sm" onClick={() => deleteTaklif(t.id)} className="gap-1"><Trash2 className="w-3 h-3" /></Button>
                           </div>
                         </div>
                       ))}
@@ -881,7 +1007,18 @@ const Admin = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {pishSabtenamList.map(pish => (
                       <Card key={pish.id} className="p-6 border-2">
-                        <div className="flex items-center justify-between mb-4"><h3 className="font-bold text-lg">{pish.title || `واحد ${pish.unit_number}`}</h3><div className="flex items-center gap-2"><Switch checked={pish.is_enabled} onCheckedChange={() => togglePishEnabled(pish)} /><span className="text-xs text-muted-foreground">{pish.is_enabled ? "فعال" : "غیرفعال"}</span></div></div>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-bold text-lg">{pish.title || `واحد ${pish.unit_number}`}</h3>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={pish.is_enabled}
+                              onCheckedChange={() => togglePishEnabled(pish)}
+                            />
+                            <span className={`text-xs font-medium ${pish.is_enabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                              {pish.is_enabled ? "فعال" : "غیرفعال"}
+                            </span>
+                          </div>
+                        </div>
                         <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{pish.content || "بدون محتوا"}</p>
                         <Button variant="outline" className="w-full gap-2" onClick={() => handleEditPish(pish)}><Edit2 className="w-4 h-4" /> ویرایش</Button>
                       </Card>

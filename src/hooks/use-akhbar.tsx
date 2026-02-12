@@ -9,6 +9,7 @@ export interface Akhbar {
   title: string;
   content: string;
   image_url: string | null;
+  image_size: string;
   target_grades: string[];
   is_published: boolean;
   created_by: string;
@@ -58,12 +59,14 @@ export function useAkhbar(options: UseAkhbarOptions = {}) {
     imageUrl: string | null,
     targetGrades: string[],
     isPublished: boolean,
-    createdBy: string
+    createdBy: string,
+    imageSize: string = "large"
   ) => {
     const { error } = await secureApi.insert('akhbar', {
       title,
       content,
       image_url: imageUrl,
+      image_size: imageSize,
       target_grades: targetGrades,
       is_published: isPublished,
       created_by: createdBy,
