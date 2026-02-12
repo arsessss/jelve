@@ -310,7 +310,7 @@ const Student = () => {
                       <Card key={item.id} className="p-6 border-2">
                         <h3 className="font-bold text-lg mb-2">{item.title}</h3>
                         <p className="text-xs text-muted-foreground mb-4">{new Date(item.created_at).toLocaleDateString('fa-IR')}</p>
-                        {item.image_url && <img src={item.image_url} alt={item.title} className="w-full max-h-64 object-contain rounded-lg mb-4 cursor-pointer" onClick={() => setImagePopupUrl(item.image_url)} />}
+                        {item.image_url && <img src={item.image_url} alt={item.title} className={`${item.image_size === 'small' ? 'max-h-24 max-w-[120px]' : item.image_size === 'medium' ? 'max-h-48 max-w-[300px]' : 'w-full max-h-64'} object-contain rounded-lg mb-4 cursor-pointer`} onClick={() => setImagePopupUrl(item.image_url)} />}
                         <div className="text-sm whitespace-pre-wrap leading-relaxed">{renderFormattedText(item.content)}</div>
                       </Card>
                     ))}
