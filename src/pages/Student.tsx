@@ -161,7 +161,7 @@ const Student = () => {
       const { error: uploadError } = await supabase.storage.from("chat-files").upload(fileName, taklifFile);
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("chat-files").getPublicUrl(fileName);
-      const { error } = await secureApi.insert('taklif', { subject: taklifSubject, file_url: urlData.publicUrl, file_name: taklifFile.name });
+      const { error } = await secureApi.insert('taklif', { student_id: studentData.id, grade: studentData.grade, subject: taklifSubject, file_url: urlData.publicUrl, file_name: taklifFile.name });
       if (error) throw new Error(error);
       toast.success("تکلیف ارسال شد");
       setTaklifFile(null);
