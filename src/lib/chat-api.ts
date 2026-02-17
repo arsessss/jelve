@@ -25,9 +25,10 @@ async function chatApiCall<T = unknown>(action: string, data?: Record<string, un
         },
       });
 
-      if (error) {
-        throw error;
-      }
+      // If we got a response body with error, use it
+      if (error && result?.error) return result;
+      // Network-level error, throw for retry
+      if (error && !result) throw error;
 
       return result;
     });
@@ -39,8 +40,11 @@ async function chatApiCall<T = unknown>(action: string, data?: Record<string, un
     return { data: result.data as T, existing: result.existing, deleted: result.deleted };
   } catch (err) {
     console.error('Chat API error:', err);
-    const errorMessage = err instanceof Error ? err.message : 'خطای شبکه';
-    return { error: errorMessage };
+    const rawMsg = err instanceof Error ? err.message : '';
+    if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
+      return { error: 'خطای سرور. لطفا دوباره تلاش کنید' };
+    }
+    return { error: rawMsg || 'خطای شبکه' };
   }
 }
 

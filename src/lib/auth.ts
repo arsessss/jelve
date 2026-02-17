@@ -24,7 +24,12 @@ export const customAuth = {
           body: { username, password }
         });
 
-        if (error) {
+        // If we got a response body with error, use it (don't throw)
+        if (error && data?.error) {
+          return data;
+        }
+        // Network-level error (no response body), throw for retry
+        if (error && !data) {
           throw error;
         }
 
@@ -42,8 +47,11 @@ export const customAuth = {
       return { session, error: null };
     } catch (err) {
       console.error("Login error:", err);
-      const errorMessage = err instanceof Error ? err.message : "خطا در برقراری ارتباط با سرور";
-      return { session: null, error: errorMessage };
+      const rawMsg = err instanceof Error ? err.message : "";
+      if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
+        return { session: null, error: "خطا در برقراری ارتباط با سرور" };
+      }
+      return { session: null, error: rawMsg || "خطا در برقراری ارتباط با سرور" };
     }
   },
 
@@ -78,9 +86,8 @@ export const customAuth = {
           body: { token: stored.token }
         });
 
-        if (error) {
-          throw error;
-        }
+        if (error && data?.error) return data;
+        if (error && !data) throw error;
 
         return data;
       }, { maxRetries: 2 });
@@ -112,9 +119,8 @@ export const customAuth = {
           body: { username, password, fullName, role }
         });
 
-        if (error) {
-          throw error;
-        }
+        if (error && data?.error) return data;
+        if (error && !data) throw error;
 
         return data;
       });
@@ -126,8 +132,11 @@ export const customAuth = {
       return { userId: data.userId, error: null };
     } catch (err) {
       console.error("Signup error:", err);
-      const errorMessage = err instanceof Error ? err.message : "خطا در برقراری ارتباط با سرور";
-      return { userId: null, error: errorMessage };
+      const rawMsg = err instanceof Error ? err.message : "";
+      if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
+        return { userId: null, error: "خطا در برقراری ارتباط با سرور" };
+      }
+      return { userId: null, error: rawMsg || "خطا در برقراری ارتباط با سرور" };
     }
   },
 
@@ -143,9 +152,8 @@ export const customAuth = {
           body: { token: session.token, currentPassword, newPassword }
         });
 
-        if (error) {
-          throw error;
-        }
+        if (error && data?.error) return data;
+        if (error && !data) throw error;
 
         return data;
       });
@@ -157,8 +165,11 @@ export const customAuth = {
       return { success: true, error: null };
     } catch (err) {
       console.error("Change password error:", err);
-      const errorMessage = err instanceof Error ? err.message : "خطا در برقراری ارتباط با سرور";
-      return { success: false, error: errorMessage };
+      const rawMsg = err instanceof Error ? err.message : "";
+      if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
+        return { success: false, error: "خطا در تغییر رمز عبور" };
+      }
+      return { success: false, error: rawMsg || "خطا در برقراری ارتباط با سرور" };
     }
   },
 };

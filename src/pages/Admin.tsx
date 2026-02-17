@@ -210,27 +210,7 @@ const Admin = () => {
     }
   }, [activeSection]);
 
-  // Update badges when data changes
-  useEffect(() => {
-    if (activeSection !== "messages") {
-      const diff = messages.length - lastSeenRef.current.messages;
-      if (diff > 0) {
-        setBadgeCounts(prev => ({ ...prev, messages: diff }));
-        playNotificationSound();
-      }
-    }
-  }, [messages.length, activeSection]);
-
-  useEffect(() => {
-    const pendingCount = taklifList.filter(t => t.status === "pending").length;
-    if (activeSection !== "taklif") {
-      const diff = pendingCount - lastSeenRef.current.taklif;
-      if (diff > 0) {
-        setBadgeCounts(prev => ({ ...prev, taklif: diff }));
-        playNotificationSound();
-      }
-    }
-  }, [taklifList, activeSection]);
+  // Note: Badge updates for messages and taklif are now handled by realtime subscriptions below
 
   // Realtime chat notifications
   useEffect(() => {
@@ -247,6 +227,45 @@ const Admin = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUserId, activeSection]);
+
+  // Realtime contact_messages notifications
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-contact-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contact_messages' }, () => {
+        fetchMessages();
+        if (activeSection !== "messages") {
+          setBadgeCounts(prev => ({ ...prev, messages: prev.messages + 1 }));
+          playNotificationSound();
+        }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'contact_messages' }, () => {
+        fetchMessages();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [activeSection]);
+
+  // Realtime taklif notifications
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-taklif-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'taklif' }, () => {
+        fetchTaklif();
+        if (activeSection !== "taklif") {
+          setBadgeCounts(prev => ({ ...prev, taklif: prev.taklif + 1 }));
+          playNotificationSound();
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'taklif' }, () => {
+        fetchTaklif();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'taklif' }, () => {
+        fetchTaklif();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [activeSection]);
 
   useEffect(() => { checkAuth(); }, []);
 
