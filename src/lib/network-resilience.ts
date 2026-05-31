@@ -1,6 +1,28 @@
 // Network resilience wrapper for API calls
 // Provides retry logic and offline queue for restricted regions
 
+// Extract JSON body from a supabase-js FunctionsHttpError (Response is on error.context)
+export async function extractErrorBody(
+  err: unknown
+): Promise<{ error?: string; data?: unknown } | null> {
+  try {
+    const ctx = (err as { context?: Response })?.context;
+    if (ctx && typeof ctx.clone === 'function') {
+      const cloned = ctx.clone();
+      const txt = await cloned.text();
+      if (!txt) return null;
+      try {
+        return JSON.parse(txt);
+      } catch {
+        return { error: txt };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 const RETRY_DELAYS = [100, 500, 1000, 2000];
 const MAX_RETRIES = 4;
 const REQUEST_TIMEOUT = 20000;

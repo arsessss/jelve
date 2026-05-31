@@ -9,8 +9,6 @@ import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Student from "./pages/Student";
 import Parent from "./pages/Parent";
-import Sport from "./pages/Sport";
-import SportLogin from "./pages/SportLogin";
 import PishSabtenam from "./pages/PishSabtenam";
 import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
@@ -28,8 +26,6 @@ const App = () => (
           <Route path="/admin" element={<Admin />} />
           <Route path="/student" element={<Student />} />
           <Route path="/parent" element={<Parent />} />
-          <Route path="/sport" element={<Sport />} />
-          <Route path="/sport/login" element={<SportLogin />} />
           <Route path="/pish-sabtenam/:id" element={<PishSabtenam />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

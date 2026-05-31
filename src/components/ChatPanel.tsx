@@ -42,7 +42,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
   const groupPictureInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
 
   const loadConversations = useCallback(async () => {

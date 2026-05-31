@@ -1,7 +1,7 @@
 import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { SchoolBlock } from "@/components/SchoolBlock";
 import { Link } from "react-router-dom";
-import { Dumbbell, ClipboardList } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -57,13 +57,6 @@ const Home = () => {
             <p className="text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed" dir="rtl">
               تربیت نسلی موفق با آموزش باکیفیت
             </p>
-            <Link 
-              to="/sport" 
-              className="inline-flex items-center gap-3 px-8 py-4 bg-foreground text-background font-bold text-lg rounded-lg transition-all duration-300 hover:scale-105 hover:shadow-lg active:scale-95 touch-target"
-            >
-              <Dumbbell className="w-6 h-6" />
-              جلوه اسپورت
-            </Link>
           </div>
         </section>
 

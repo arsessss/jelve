@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { withRetry } from "./network-resilience";
+import { withRetry, extractErrorBody } from "./network-resilience";
 
 export interface CustomUser {
   id: string;
@@ -24,15 +24,11 @@ export const customAuth = {
           body: { username, password }
         });
 
-        // If we got a response body with error, use it (don't throw)
-        if (error && data?.error) {
-          return data;
-        }
-        // Network-level error (no response body), throw for retry
-        if (error && !data) {
+        if (error) {
+          const body = await extractErrorBody(error);
+          if (body) return body;
           throw error;
         }
-
         return data;
       });
 
@@ -47,6 +43,8 @@ export const customAuth = {
       return { session, error: null };
     } catch (err) {
       console.error("Login error:", err);
+      const body = await extractErrorBody(err);
+      if (body?.error) return { session: null, error: body.error };
       const rawMsg = err instanceof Error ? err.message : "";
       if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
         return { session: null, error: "خطا در برقراری ارتباط با سرور" };
@@ -86,9 +84,11 @@ export const customAuth = {
           body: { token: stored.token }
         });
 
-        if (error && data?.error) return data;
-        if (error && !data) throw error;
-
+        if (error) {
+          const body = await extractErrorBody(error);
+          if (body) return body;
+          throw error;
+        }
         return data;
       }, { maxRetries: 2 });
 
@@ -119,9 +119,11 @@ export const customAuth = {
           body: { username, password, fullName, role }
         });
 
-        if (error && data?.error) return data;
-        if (error && !data) throw error;
-
+        if (error) {
+          const body = await extractErrorBody(error);
+          if (body) return body;
+          throw error;
+        }
         return data;
       });
 
@@ -132,6 +134,8 @@ export const customAuth = {
       return { userId: data.userId, error: null };
     } catch (err) {
       console.error("Signup error:", err);
+      const body = await extractErrorBody(err);
+      if (body?.error) return { userId: null, error: body.error };
       const rawMsg = err instanceof Error ? err.message : "";
       if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
         return { userId: null, error: "خطا در برقراری ارتباط با سرور" };
@@ -152,9 +156,11 @@ export const customAuth = {
           body: { token: session.token, currentPassword, newPassword }
         });
 
-        if (error && data?.error) return data;
-        if (error && !data) throw error;
-
+        if (error) {
+          const body = await extractErrorBody(error);
+          if (body) return body;
+          throw error;
+        }
         return data;
       });
 
@@ -165,6 +171,8 @@ export const customAuth = {
       return { success: true, error: null };
     } catch (err) {
       console.error("Change password error:", err);
+      const body = await extractErrorBody(err);
+      if (body?.error) return { success: false, error: body.error };
       const rawMsg = err instanceof Error ? err.message : "";
       if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
         return { success: false, error: "خطا در تغییر رمز عبور" };
