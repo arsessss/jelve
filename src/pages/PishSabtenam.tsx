@@ -8,6 +8,7 @@ import { customAuth } from "@/lib/auth";
 import { renderFormattedText } from "@/hooks/use-akhbar";
 import { ArrowLeft, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SignedImage } from "@/components/SignedImage";
 
 interface PishSabtenamData {
   id: string;
@@ -87,16 +88,18 @@ const PishSabtenam = () => {
             
             {data.image_url && (
               <>
-                <img 
-                  src={data.image_url} 
+                <SignedImage
+                  bucket="profile-pictures"
+                  source={data.image_url}
                   alt={data.title}
                   className="w-full rounded-lg mb-6 cursor-pointer object-contain max-h-96"
                   onClick={() => setImageOpen(true)}
                 />
                 <Dialog open={imageOpen} onOpenChange={setImageOpen}>
                   <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
-                    <img 
-                      src={data.image_url} 
+                    <SignedImage
+                      bucket="profile-pictures"
+                      source={data.image_url}
                       alt={data.title}
                       className="w-full h-full object-contain"
                     />
