@@ -2,7 +2,9 @@ import { RoleBasedHeader } from "@/components/RoleBasedHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { SignedAvatarImage, SignedImage } from "@/components/SignedImage";
+import { getSignedUrl } from "@/lib/signed-url";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -152,6 +154,18 @@ const Student = () => {
   };
 
   const handleLinkClick = (link: string) => { let url = link; if (!url.startsWith("http")) url = "https://" + url; window.open(url, "_blank"); };
+  const openJozveh = async (j: Jozveh) => {
+    if (j.file_url) {
+      const u = await getSignedUrl("jozveh-files", j.file_url);
+      if (u) window.open(u, "_blank", "noopener,noreferrer");
+      return;
+    }
+    handleLinkClick(j.link);
+  };
+  const openAkhbarImage = async (img: string) => {
+    const u = await getSignedUrl("profile-pictures", img);
+    if (u) setImagePopupUrl(u);
+  };
 
   const handleTaklifUpload = async () => {
     if (!taklifFile || !studentData) { toast.error("فایل انتخاب کنید"); return; }
@@ -210,7 +224,7 @@ const Student = () => {
                 <Card className="p-6 border-2">
                   <div className="flex flex-col sm:flex-row items-center gap-6">
                     <div className="relative">
-                      <Avatar className="w-24 h-24 border-4 border-border"><AvatarImage src={userData?.profile_picture || undefined} /><AvatarFallback><User className="w-12 h-12 text-muted-foreground" /></AvatarFallback></Avatar>
+                      <Avatar className="w-24 h-24 border-4 border-border"><SignedAvatarImage source={userData?.profile_picture} /><AvatarFallback><User className="w-12 h-12 text-muted-foreground" /></AvatarFallback></Avatar>
                       <input type="file" ref={fileInputRef} onChange={handleProfilePictureUpload} accept="image/*" className="hidden" />
                       <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="absolute -bottom-2 -right-2 rounded-full w-8 h-8"><Camera className="w-4 h-4" /></Button>
                     </div>
@@ -283,7 +297,7 @@ const Student = () => {
                     {jozvehList.map(j => (
                       <Card key={j.id} className="p-5 border-2 hover:border-primary/30 transition-all">
                         <div className="flex items-start gap-4"><div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><FileText className="w-6 h-6 text-primary" /></div>
-                          <div className="flex-1 min-w-0"><h3 className="font-bold truncate">{j.title}</h3><p className="text-sm text-muted-foreground">{getSubjectLabel(j.subject)}</p><Button variant="outline" size="sm" onClick={() => handleLinkClick(j.file_url || j.link)} className="mt-3 gap-2"><Download className="w-4 h-4" /> دانلود</Button></div>
+                          <div className="flex-1 min-w-0"><h3 className="font-bold truncate">{j.title}</h3><p className="text-sm text-muted-foreground">{getSubjectLabel(j.subject)}</p><Button variant="outline" size="sm" onClick={() => openJozveh(j)} className="mt-3 gap-2"><Download className="w-4 h-4" /> دانلود</Button></div>
                         </div>
                       </Card>
                     ))}
@@ -310,7 +324,7 @@ const Student = () => {
                       <Card key={item.id} className="p-6 border-2">
                         <h3 className="font-bold text-lg mb-2">{item.title}</h3>
                         <p className="text-xs text-muted-foreground mb-4">{new Date(item.created_at).toLocaleDateString('fa-IR')}</p>
-                        {item.image_url && <img src={item.image_url} alt={item.title} className={`${item.image_size === 'small' ? 'max-h-24 max-w-[120px]' : item.image_size === 'medium' ? 'max-h-48 max-w-[300px]' : 'w-full max-h-64'} object-contain rounded-lg mb-4 cursor-pointer`} onClick={() => setImagePopupUrl(item.image_url)} />}
+                        {item.image_url && <SignedImage bucket="profile-pictures" source={item.image_url} alt={item.title} className={`${item.image_size === 'small' ? 'max-h-24 max-w-[120px]' : item.image_size === 'medium' ? 'max-h-48 max-w-[300px]' : 'w-full max-h-64'} object-contain rounded-lg mb-4 cursor-pointer`} onClick={() => openAkhbarImage(item.image_url!)} />}
                         <div className="text-sm whitespace-pre-wrap leading-relaxed">{renderFormattedText(item.content)}</div>
                       </Card>
                     ))}
