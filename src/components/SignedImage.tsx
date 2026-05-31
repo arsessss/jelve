@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getSignedUrl } from "@/lib/signed-url";
+import { AvatarImage } from "@/components/ui/avatar";
 
 type Bucket = "profile-pictures" | "chat-files" | "jozveh-files";
 
@@ -42,4 +43,15 @@ export function SignedLink({ bucket, source, children, ...rest }: SignedLinkProp
       {children}
     </a>
   );
+}
+
+interface SignedAvatarImageProps {
+  bucket?: Bucket;
+  source: string | null | undefined;
+  className?: string;
+}
+
+export function SignedAvatarImage({ bucket = "profile-pictures", source, className }: SignedAvatarImageProps) {
+  const url = useSignedUrl(bucket, source);
+  return <AvatarImage src={url} className={className} />;
 }
