@@ -315,7 +315,7 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                 }`}
               >
                 <Avatar className="w-10 h-10 shrink-0">
-                  <AvatarImage src={getConversationAvatar(conv) || undefined} />
+                  <SignedAvatarImage source={getConversationAvatar(conv)} />
                   <AvatarFallback>
                     <User className="w-5 h-5" />
                   </AvatarFallback>
@@ -348,7 +348,7 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <Avatar className="w-8 h-8">
-                <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
+                <SignedAvatarImage source={getConversationAvatar(selectedConversation)} />
                 <AvatarFallback>
                   <User className="w-4 h-4" />
                 </AvatarFallback>
@@ -364,7 +364,7 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                     className={`flex gap-2 ${msg.sender_id === currentUserId ? 'flex-row-reverse' : ''}`}
                   >
                     <Avatar className="w-8 h-8 shrink-0">
-                      <AvatarImage src={msg.sender?.profile_picture || undefined} />
+                      <SignedAvatarImage source={msg.sender?.profile_picture} />
                       <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
                     </Avatar>
                     <div className={`max-w-[70%] ${msg.sender_id === currentUserId ? 'text-right' : ''}`}>

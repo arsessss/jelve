@@ -569,7 +569,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                         className="w-full flex items-center gap-3 p-2 hover:bg-muted transition-colors text-right"
                       >
                         <Avatar className="w-8 h-8">
-                          <AvatarImage src={user.profile_picture || undefined} />
+                          <SignedAvatarImage source={user.profile_picture} />
                           <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
                         </Avatar>
                         <span>{user.full_name || user.username}</span>
@@ -613,7 +613,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                       className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-right"
                     >
                       <Avatar className="w-10 h-10">
-                        <AvatarImage src={user.profile_picture || undefined} />
+                        <SignedAvatarImage source={user.profile_picture} />
                         <AvatarFallback><User className="w-5 h-5" /></AvatarFallback>
                       </Avatar>
                       <div>
@@ -647,7 +647,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                 }`}
               >
                 <Avatar className="w-10 h-10 shrink-0">
-                  <AvatarImage src={getConversationAvatar(conv) || undefined} />
+                  <SignedAvatarImage source={getConversationAvatar(conv)} />
                   <AvatarFallback>
                     {conv.is_group ? <Users className="w-5 h-5" /> : <User className="w-5 h-5" />}
                   </AvatarFallback>
@@ -680,7 +680,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <Avatar className="w-8 h-8">
-                <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
+                <SignedAvatarImage source={getConversationAvatar(selectedConversation)} />
                 <AvatarFallback>
                   {selectedConversation.is_group ? <Users className="w-4 h-4" /> : <User className="w-4 h-4" />}
                 </AvatarFallback>
@@ -726,7 +726,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                       {currentUserIsAdmin && (
                         <div className="flex flex-col items-center gap-3">
                           <Avatar className="w-20 h-20 border-2 border-border">
-                            <AvatarImage src={selectedConversation.group_picture || undefined} />
+                            <SignedAvatarImage source={selectedConversation.group_picture} />
                             <AvatarFallback><Users className="w-10 h-10" /></AvatarFallback>
                           </Avatar>
                           <input
@@ -791,7 +791,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                                     className="w-full flex items-center gap-3 p-2 hover:bg-muted transition-colors text-right"
                                   >
                                     <Avatar className="w-8 h-8">
-                                      <AvatarImage src={user.profile_picture || undefined} />
+                                      <SignedAvatarImage source={user.profile_picture} />
                                       <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
                                     </Avatar>
                                     <span>{user.full_name || user.username}</span>
@@ -816,7 +816,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                                 className="flex items-center gap-3 p-2 border-b last:border-b-0"
                               >
                                 <Avatar className="w-8 h-8">
-                                  <AvatarImage src={user.profile_picture || undefined} />
+                                  <SignedAvatarImage source={user.profile_picture} />
                                   <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
                                 </Avatar>
                                 <span className="flex-1">{user.full_name || user.username}</span>
@@ -877,7 +877,7 @@ export const ChatPanel = ({ currentUserId }: ChatPanelProps) => {
                     <div key={msg.id} className={`flex ${isOwn ? 'justify-start' : 'justify-end'} group`}>
                       {showAvatar && (
                         <Avatar className="w-8 h-8 shrink-0 ml-2 order-3">
-                          <AvatarImage src={msg.sender?.profile_picture || undefined} />
+                          <SignedAvatarImage source={msg.sender?.profile_picture} />
                           <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
                         </Avatar>
                       )}
