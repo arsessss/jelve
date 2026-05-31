@@ -1,6 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { withRetry } from "./network-resilience";
-import { extractErrorBody } from "./secure-api";
+import { withRetry, extractErrorBody } from "./network-resilience";
 
 export interface CustomUser {
   id: string;
