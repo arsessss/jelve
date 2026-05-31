@@ -55,3 +55,21 @@ export function SignedAvatarImage({ bucket = "profile-pictures", source, classNa
   const url = useSignedUrl(bucket, source);
   return <AvatarImage src={url} className={className} />;
 }
+
+import { FileText as _FileText } from "lucide-react";
+
+export function ChatFileAttachment({ url, name, isImage, isAudio }: { url: string | null | undefined; name?: string | null; isImage?: boolean; isAudio?: boolean; }) {
+  const signed = useSignedUrl("chat-files", url);
+  if (!signed) return null;
+  if (isImage) {
+    return <img src={signed} alt={name || "تصویر"} className="max-w-full rounded-lg cursor-pointer" onClick={() => window.open(signed, "_blank")} />;
+  }
+  if (isAudio) {
+    return <audio controls src={signed} className="max-w-full" />;
+  }
+  return (
+    <a href={signed} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm underline">
+      <_FileText className="w-4 h-4" /> {name || "فایل"}
+    </a>
+  );
+}
