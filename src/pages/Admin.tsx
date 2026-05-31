@@ -6,7 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { SignedAvatarImage, SignedImage, SignedLink } from "@/components/SignedImage";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -730,7 +731,7 @@ const Admin = () => {
                   <div className="flex flex-col sm:flex-row items-center gap-6">
                     <div className="relative">
                       <Avatar className="w-24 h-24 border-4 border-border">
-                        <AvatarImage src={userData?.profile_picture || undefined} />
+                        <SignedAvatarImage source={userData?.profile_picture} />
                         <AvatarFallback><User className="w-12 h-12 text-muted-foreground" /></AvatarFallback>
                       </Avatar>
                       <input type="file" ref={profileFileRef} onChange={handleProfilePictureUpload} accept="image/*" className="hidden" />
@@ -957,7 +958,7 @@ const Admin = () => {
                           <div className="flex-1"><h4 className="font-bold text-lg">{item.title}</h4><p className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleDateString('fa-IR')}{!item.is_published && " | پیش‌نویس"}{item.target_grades.length > 0 && ` | ${item.target_grades.join(', ')}`}</p></div>
                           <Button variant="destructive" size="icon" onClick={() => handleDeleteAkhbar(item.id)}><Trash2 className="w-4 h-4" /></Button>
                         </div>
-                        {item.image_url && <img src={item.image_url} alt={item.title} className={`${getImageSizeClass((item as any).image_size || "large")} object-contain rounded-lg mb-3`} />}
+                        {item.image_url && <SignedImage bucket="profile-pictures" source={item.image_url} alt={item.title} className={`${getImageSizeClass((item as any).image_size || "large")} object-contain rounded-lg mb-3`} />}
                         <p className="text-sm whitespace-pre-wrap">{renderFormattedText(item.content)}</p>
                       </div>
                     ))}
@@ -993,7 +994,7 @@ const Admin = () => {
                           </div>
                           <p className="text-xs text-muted-foreground mb-3">{new Date(t.created_at).toLocaleDateString('fa-IR')}</p>
                           <div className="flex gap-2">
-                            <a href={t.file_url} target="_blank" rel="noopener noreferrer"><Button variant="outline" size="sm" className="gap-1"><Download className="w-3 h-3" /> دانلود</Button></a>
+                            <SignedLink bucket="chat-files" source={t.file_url}><Button variant="outline" size="sm" className="gap-1"><Download className="w-3 h-3" /> دانلود</Button></SignedLink>
                             {t.status !== 'reviewed' && <Button size="sm" onClick={() => updateTaklifStatus(t.id, 'reviewed')}>بررسی شد</Button>}
                             <Button variant="destructive" size="sm" onClick={() => deleteTaklif(t.id)} className="gap-1"><Trash2 className="w-3 h-3" /></Button>
                           </div>
