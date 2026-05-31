@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { SignedAvatarImage } from "@/components/SignedImage";
+import { SignedAvatarImage, ChatFileAttachment } from "@/components/SignedImage";
 import { getSignedUrl } from "@/lib/signed-url";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -379,25 +379,9 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                       >
                         {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                         {msg.file_url && (
-                          isImageFile(msg.file_name) ? (
-                            <a href={msg.file_url} target="_blank" rel="noopener noreferrer">
-                              <img 
-                                src={msg.file_url} 
-                                alt={msg.file_name || "تصویر"} 
-                                className="max-w-full rounded mt-2 cursor-pointer hover:opacity-90"
-                              />
-                            </a>
-                          ) : (
-                            <a 
-                              href={msg.file_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 mt-2 text-sm underline"
-                            >
-                              <FileText className="w-4 h-4" />
-                              {msg.file_name || "فایل"}
-                            </a>
-                          )
+                          <div className="mt-2">
+                            <ChatFileAttachment url={msg.file_url} name={msg.file_name} isImage={isImageFile(msg.file_name)} />
+                          </div>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
