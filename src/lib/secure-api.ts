@@ -7,6 +7,22 @@ interface ApiResponse<T = unknown> {
   error?: string;
 }
 
+// Extract JSON body from a FunctionsHttpError (supabase-js wraps the Response in error.context)
+export async function extractErrorBody(err: unknown): Promise<{ error?: string; data?: unknown } | null> {
+  try {
+    const ctx = (err as { context?: Response })?.context;
+    if (ctx && typeof ctx.clone === 'function') {
+      const cloned = ctx.clone();
+      const txt = await cloned.text();
+      if (!txt) return null;
+      try { return JSON.parse(txt); } catch { return { error: txt }; }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 interface ApiParams {
   table: string;
   action: 'select' | 'insert' | 'update' | 'upsert' | 'delete';
