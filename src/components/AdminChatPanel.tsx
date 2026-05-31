@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { SignedAvatarImage, ChatFileAttachment } from "@/components/SignedImage";
+import { getSignedUrl } from "@/lib/signed-url";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -315,7 +317,7 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                 }`}
               >
                 <Avatar className="w-10 h-10 shrink-0">
-                  <AvatarImage src={getConversationAvatar(conv) || undefined} />
+                  <SignedAvatarImage source={getConversationAvatar(conv)} />
                   <AvatarFallback>
                     <User className="w-5 h-5" />
                   </AvatarFallback>
@@ -348,7 +350,7 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <Avatar className="w-8 h-8">
-                <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
+                <SignedAvatarImage source={getConversationAvatar(selectedConversation)} />
                 <AvatarFallback>
                   <User className="w-4 h-4" />
                 </AvatarFallback>
@@ -364,7 +366,7 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                     className={`flex gap-2 ${msg.sender_id === currentUserId ? 'flex-row-reverse' : ''}`}
                   >
                     <Avatar className="w-8 h-8 shrink-0">
-                      <AvatarImage src={msg.sender?.profile_picture || undefined} />
+                      <SignedAvatarImage source={msg.sender?.profile_picture} />
                       <AvatarFallback><User className="w-4 h-4" /></AvatarFallback>
                     </Avatar>
                     <div className={`max-w-[70%] ${msg.sender_id === currentUserId ? 'text-right' : ''}`}>
@@ -377,25 +379,9 @@ export const AdminChatPanel = ({ currentUserId }: AdminChatPanelProps) => {
                       >
                         {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                         {msg.file_url && (
-                          isImageFile(msg.file_name) ? (
-                            <a href={msg.file_url} target="_blank" rel="noopener noreferrer">
-                              <img 
-                                src={msg.file_url} 
-                                alt={msg.file_name || "تصویر"} 
-                                className="max-w-full rounded mt-2 cursor-pointer hover:opacity-90"
-                              />
-                            </a>
-                          ) : (
-                            <a 
-                              href={msg.file_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 mt-2 text-sm underline"
-                            >
-                              <FileText className="w-4 h-4" />
-                              {msg.file_name || "فایل"}
-                            </a>
-                          )
+                          <div className="mt-2">
+                            <ChatFileAttachment url={msg.file_url} name={msg.file_name} isImage={isImageFile(msg.file_name)} />
+                          </div>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">

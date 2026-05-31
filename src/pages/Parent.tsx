@@ -8,6 +8,7 @@ import { customAuth, AuthSession } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { renderFormattedText } from "@/hooks/use-akhbar";
 import { useAkhbar } from "@/hooks/use-akhbar";
+import { SignedImage } from "@/components/SignedImage";
 import { LogOut, GraduationCap, User, Newspaper, ChevronDown, ChevronUp, Users } from "lucide-react";
 
 interface StudentData {
@@ -214,7 +215,7 @@ const Parent = () => {
                         <Card key={item.id} className="p-6 border-2">
                           <h3 className="font-bold text-lg mb-2">{item.title}</h3>
                           <p className="text-xs text-muted-foreground mb-4">{new Date(item.created_at).toLocaleDateString('fa-IR')}</p>
-                          {item.image_url && <img src={item.image_url} alt={item.title} className="w-full max-h-64 object-contain rounded-lg mb-4" />}
+                          {item.image_url && <SignedImage bucket="profile-pictures" source={item.image_url} alt={item.title} className="w-full max-h-64 object-contain rounded-lg mb-4" />}
                           <div className="text-sm whitespace-pre-wrap leading-relaxed">{renderFormattedText(item.content)}</div>
                         </Card>
                       ))
