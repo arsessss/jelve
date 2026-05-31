@@ -58,16 +58,12 @@ async function apiCall<T = unknown>({ table, action, data, filters, id }: ApiPar
         },
       });
 
-      // If we got data with an error field, return it (don't throw)
-      if (error && result?.error) {
-        return result;
-      }
-
-      // If it's a network-level error (no response body), throw for retry
-      if (error && !result) {
+      if (error) {
+        // Try to extract the JSON body the edge function returned (e.g. { error: "..." })
+        const body = await extractErrorBody(error);
+        if (body && (body.error || body.data !== undefined)) return body;
         throw error;
       }
-
       return result;
     });
 
@@ -78,7 +74,8 @@ async function apiCall<T = unknown>({ table, action, data, filters, id }: ApiPar
     return { data: result.data as T };
   } catch (err) {
     console.error('API error:', err);
-    // Translate the error message
+    const body = await extractErrorBody(err);
+    if (body?.error) return { error: translateError(body.error) };
     const rawMessage = err instanceof Error ? err.message : '';
     if (rawMessage.includes('non-2xx') || rawMessage.includes('Edge Function')) {
       return { error: 'خطای سرور. لطفا دوباره تلاش کنید' };
