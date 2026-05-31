@@ -8,6 +8,7 @@ import { customAuth, AuthSession } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { renderFormattedText } from "@/hooks/use-akhbar";
 import { useAkhbar } from "@/hooks/use-akhbar";
+import { SignedImage } from "@/components/SignedImage";
 import { LogOut, GraduationCap, User, Newspaper, ChevronDown, ChevronUp, Users } from "lucide-react";
 
 interface StudentData {
