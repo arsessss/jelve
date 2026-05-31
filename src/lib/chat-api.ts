@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "./auth";
-import { withRetry } from "./network-resilience";
+import { withRetry, extractErrorBody } from "./network-resilience";
 
 interface ChatApiResponse<T = unknown> {
   data?: T;
@@ -25,11 +25,11 @@ async function chatApiCall<T = unknown>(action: string, data?: Record<string, un
         },
       });
 
-      // If we got a response body with error, use it
-      if (error && result?.error) return result;
-      // Network-level error, throw for retry
-      if (error && !result) throw error;
-
+      if (error) {
+        const body = await extractErrorBody(error);
+        if (body) return body;
+        throw error;
+      }
       return result;
     });
 
@@ -40,6 +40,8 @@ async function chatApiCall<T = unknown>(action: string, data?: Record<string, un
     return { data: result.data as T, existing: result.existing, deleted: result.deleted };
   } catch (err) {
     console.error('Chat API error:', err);
+    const body = await extractErrorBody(err);
+    if (body?.error) return { error: body.error };
     const rawMsg = err instanceof Error ? err.message : '';
     if (rawMsg.includes('non-2xx') || rawMsg.includes('Edge Function')) {
       return { error: 'خطای سرور. لطفا دوباره تلاش کنید' };
