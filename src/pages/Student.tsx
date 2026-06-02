@@ -100,6 +100,10 @@ const Student = () => {
       fetchJozveh(studentData.grade);
       fetchGradePeriods(studentData.grade);
       fetchPeriodGrades(studentData.id);
+      const interval = setInterval(() => fetchOnlineClasses(studentData.grade), 8000);
+      const onVis = () => { if (!document.hidden) fetchOnlineClasses(studentData.grade); };
+      document.addEventListener('visibilitychange', onVis);
+      return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis); };
     }
   }, [studentData]);
 
