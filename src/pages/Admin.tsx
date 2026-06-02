@@ -19,6 +19,7 @@ import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, 
 import { ChatPanel } from "@/components/ChatPanel";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { playNotificationSound } from "@/lib/notification-sound";
+import { onlineClassApi } from "@/lib/online-class";
 
 interface Student {
   id: string;
@@ -54,7 +55,11 @@ interface OnlineClass {
   id: string;
   grade: string;
   title: string;
-  link: string;
+  link: string | null;
+  mode: 'internal' | 'external';
+  is_live: boolean;
+  subject?: string | null;
+  description?: string | null;
 }
 interface Jozveh {
   id: string;
