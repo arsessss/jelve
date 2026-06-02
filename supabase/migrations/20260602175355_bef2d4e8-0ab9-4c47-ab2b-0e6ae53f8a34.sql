@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.validate_online_class_mode() FROM anon, authenticated, public;
