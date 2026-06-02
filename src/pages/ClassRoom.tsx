@@ -1,0 +1,350 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { customAuth, AuthSession } from "@/lib/auth";
+import { onlineClassApi, JoinResult } from "@/lib/online-class";
+import { useClassRoom } from "@/hooks/useClassRoom";
+import { VideoTile } from "@/components/classroom/VideoTile";
+import { Whiteboard } from "@/components/classroom/Whiteboard";
+import {
+  Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
+  MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power
+} from "lucide-react";
+
+type SidePanel = 'chat' | 'people' | null;
+type MainView = 'grid' | 'whiteboard';
+
+const ClassRoom = () => {
+  const { classId } = useParams<{ classId: string }>();
+  const navigate = useNavigate();
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [joinData, setJoinData] = useState<JoinResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [sidePanel, setSidePanel] = useState<SidePanel>(null);
+  const [mainView, setMainView] = useState<MainView>('grid');
+  const [chatInput, setChatInput] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auth + join
+  useEffect(() => {
+    (async () => {
+      const local = customAuth.getSession();
+      if (!local) { navigate('/login'); return; }
+      const { valid, session: s } = await customAuth.validateSession();
+      if (!valid || !s) { toast.error('لطفا دوباره وارد شوید'); navigate('/login'); return; }
+      setSession(s);
+      if (!classId) { setJoinError('کلاس نامعتبر'); setLoading(false); return; }
+      const { data, error } = await onlineClassApi.join(classId);
+      if (error || !data) { setJoinError(error || 'ورود ناموفق'); setLoading(false); return; }
+      setJoinData(data);
+      setLoading(false);
+    })();
+  }, [classId, navigate]);
+
+  const isTeacher = joinData?.role === 'teacher';
+
+  const room = useClassRoom({
+    classId: classId || '',
+    userId: joinData?.userId || '',
+    displayName: joinData?.displayName || '',
+    isTeacher: !!isTeacher,
+  });
+
+  // Auto-leave on unload
+  useEffect(() => {
+    const handler = () => {
+      if (classId) {
+        navigator.sendBeacon?.(
+          `https://yqnblkvhwrmfjuyvtxji.supabase.co/functions/v1/online-class-api`,
+          new Blob([JSON.stringify({ token: session?.token, action: 'leave', class_id: classId })], { type: 'application/json' })
+        );
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [classId, session]);
+
+  // Listen for class-ended broadcast from teacher
+  useEffect(() => {
+    const onEnded = () => {
+      toast.info('کلاس توسط معلم پایان یافت');
+      handleLeave();
+    };
+    window.addEventListener('class-ended', onEnded);
+    return () => window.removeEventListener('class-ended', onEnded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [room.chat]);
+
+  const handleLeave = async () => {
+    room.cleanup();
+    if (classId) await onlineClassApi.leave(classId);
+    if (isTeacher) navigate('/admin'); else navigate('/student');
+  };
+
+  const handleEndClass = async () => {
+    if (!classId) return;
+    if (!confirm('کلاس برای همه پایان یابد؟')) return;
+    room.announceEnd();
+    await onlineClassApi.end(classId);
+    toast.success('کلاس پایان یافت');
+    handleLeave();
+  };
+
+  const handleSendChat = () => {
+    const t = chatInput.trim();
+    if (!t) return;
+    room.sendChat(t);
+    setChatInput("");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">در حال اتصال به کلاس...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (joinError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="max-w-md w-full bg-card border-2 border-border rounded-xl p-8 text-center space-y-4">
+          <h1 className="text-xl font-bold">امکان ورود به کلاس نیست</h1>
+          <p className="text-muted-foreground">{joinError}</p>
+          <Button onClick={() => navigate(-1)}>بازگشت</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (room.mediaError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="max-w-md w-full bg-card border-2 border-border rounded-xl p-8 text-center space-y-4">
+          <h1 className="text-xl font-bold">دسترسی به دوربین/میکروفون لازم است</h1>
+          <p className="text-muted-foreground">{room.mediaError}</p>
+          <div className="flex gap-2 justify-center">
+            <Button onClick={() => window.location.reload()}>تلاش مجدد</Button>
+            <Button variant="outline" onClick={handleLeave}>خروج</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const peerList = Object.values(room.peers);
+  const totalCount = peerList.length + 1;
+
+  return (
+    <div className="h-screen w-screen flex flex-col bg-background overflow-hidden" dir="rtl">
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-card shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-2 h-2 rounded-full bg-destructive animate-pulse shrink-0" />
+          <h1 className="font-bold truncate">{joinData?.class.title}</h1>
+          <span className="text-xs text-muted-foreground hidden sm:inline">پایه {joinData?.class.grade}</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Users className="w-4 h-4" />
+          <span>{totalCount}</span>
+          {room.connected ? (
+            <span className="text-xs text-primary mr-2">متصل</span>
+          ) : (
+            <span className="text-xs">در حال اتصال...</span>
+          )}
+        </div>
+      </header>
+
+      {/* Main */}
+      <div className="flex-1 flex min-h-0">
+        {/* Stage */}
+        <main className="flex-1 p-3 min-h-0 overflow-hidden">
+          {mainView === 'grid' ? (
+            <div className={cn(
+              "h-full grid gap-3 auto-rows-fr",
+              totalCount === 1 && "grid-cols-1",
+              totalCount === 2 && "grid-cols-1 md:grid-cols-2",
+              totalCount >= 3 && totalCount <= 4 && "grid-cols-2",
+              totalCount >= 5 && "grid-cols-2 md:grid-cols-3",
+            )}>
+              <VideoTile
+                stream={room.localStream}
+                name={joinData?.displayName || 'شما'}
+                isLocal
+                micOn={room.micOn}
+                camOn={room.camOn}
+                sharing={room.sharing}
+                isTeacher={isTeacher}
+                highlight={isTeacher}
+              />
+              {peerList.map(p => (
+                <VideoTile
+                  key={p.userId}
+                  stream={p.stream}
+                  name={p.displayName}
+                  micOn={p.micOn}
+                  camOn={p.camOn}
+                  sharing={p.sharing}
+                  isTeacher={p.isTeacher}
+                  highlight={p.isTeacher}
+                />
+              ))}
+            </div>
+          ) : (
+            <Whiteboard
+              strokes={room.strokes}
+              onStroke={room.sendStroke}
+              onClear={room.clearBoard}
+              canDraw={true}
+            />
+          )}
+        </main>
+
+        {/* Side panel */}
+        {sidePanel && (
+          <aside className="w-80 border-l border-border bg-card flex flex-col shrink-0 animate-fade-in">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h2 className="font-bold flex items-center gap-2">
+                {sidePanel === 'chat' ? <><MessageSquare className="w-4 h-4" /> چت کلاس</> : <><Users className="w-4 h-4" /> شرکت‌کنندگان</>}
+              </h2>
+              <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {sidePanel === 'chat' ? (
+              <>
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+                  {room.chat.length === 0 ? (
+                    <p className="text-center text-sm text-muted-foreground py-6">پیامی نیست</p>
+                  ) : room.chat.map(m => (
+                    <div key={m.id} className={cn("p-2 rounded-lg max-w-[85%] break-words", m.userId === joinData?.userId ? "bg-primary/15 mr-auto" : "bg-muted ml-auto")}>
+                      <p className="text-xs text-muted-foreground mb-0.5">{m.name}</p>
+                      <p className="text-sm">{m.text}</p>
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+                <div className="p-2 border-t border-border flex gap-2">
+                  <Input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSendChat()}
+                    placeholder="پیام..."
+                    className="text-right"
+                  />
+                  <Button size="icon" onClick={handleSendChat}><Send className="w-4 h-4" /></Button>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-primary/10">
+                  <div className="w-9 h-9 rounded-full bg-primary/30 flex items-center justify-center font-bold text-primary">
+                    {(joinData?.displayName || 'ش').charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{joinData?.displayName} (شما)</p>
+                    {isTeacher && <p className="text-xs text-primary">معلم</p>}
+                  </div>
+                </div>
+                {peerList.map(p => (
+                  <div key={p.userId} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-bold">
+                      {p.displayName.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{p.displayName}</p>
+                      {p.isTeacher && <p className="text-xs text-primary">معلم</p>}
+                    </div>
+                    {p.micOn ? <Mic className="w-4 h-4 text-muted-foreground" /> : <MicOff className="w-4 h-4 text-destructive" />}
+                  </div>
+                ))}
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+
+      {/* Control bar */}
+      <footer className="flex items-center justify-center gap-2 sm:gap-3 px-4 py-3 border-t border-border bg-card shrink-0">
+        <ControlButton
+          active={room.micOn}
+          onClick={room.toggleMic}
+          icon={room.micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+          label={room.micOn ? "میکروفون" : "بی‌صدا"}
+          danger={!room.micOn}
+        />
+        <ControlButton
+          active={room.camOn}
+          onClick={room.toggleCam}
+          icon={room.camOn ? <VideoIcon className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+          label={room.camOn ? "دوربین" : "خاموش"}
+          danger={!room.camOn}
+        />
+        <ControlButton
+          active={room.sharing}
+          onClick={() => room.sharing ? room.stopScreenShare() : room.startScreenShare()}
+          icon={room.sharing ? <MonitorX className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
+          label={room.sharing ? "توقف اشتراک" : "اشتراک صفحه"}
+        />
+        <ControlButton
+          active={mainView === 'whiteboard'}
+          onClick={() => setMainView(v => v === 'whiteboard' ? 'grid' : 'whiteboard')}
+          icon={<Pencil className="w-5 h-5" />}
+          label="وایت‌برد"
+        />
+        <ControlButton
+          active={sidePanel === 'chat'}
+          onClick={() => setSidePanel(p => p === 'chat' ? null : 'chat')}
+          icon={<MessageSquare className="w-5 h-5" />}
+          label="چت"
+        />
+        <ControlButton
+          active={sidePanel === 'people'}
+          onClick={() => setSidePanel(p => p === 'people' ? null : 'people')}
+          icon={<Users className="w-5 h-5" />}
+          label="افراد"
+        />
+        <div className="w-px h-8 bg-border mx-1" />
+        {isTeacher && (
+          <Button variant="outline" onClick={handleEndClass} className="gap-2">
+            <Power className="w-4 h-4" /> پایان کلاس
+          </Button>
+        )}
+        <Button variant="destructive" onClick={handleLeave} className="gap-2">
+          <PhoneOff className="w-4 h-4" /> خروج
+        </Button>
+      </footer>
+    </div>
+  );
+};
+
+function ControlButton({ active, onClick, icon, label, danger }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      className={cn(
+        "flex flex-col items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full transition-all duration-300",
+        danger ? "bg-destructive/15 text-destructive hover:bg-destructive/25" :
+        active ? "bg-primary text-primary-foreground hover:bg-primary/90" :
+        "bg-muted text-foreground hover:bg-muted/70"
+      )}
+    >
+      {icon}
+    </button>
+  );
+}
+
+export default ClassRoom;
