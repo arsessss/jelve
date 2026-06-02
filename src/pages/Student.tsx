@@ -25,7 +25,7 @@ import {
 interface StudentData { id: string; full_name: string; grade: string; student_id: string | null; }
 interface GradePeriod { id: string; title: string; grade: string; }
 interface PeriodGrade { id: string; period_id: string; subject: string; grade: string | null; }
-interface OnlineClass { id: string; grade: string; title: string; link: string; }
+interface OnlineClass { id: string; grade: string; title: string; link: string | null; mode: 'internal' | 'external'; is_live: boolean; subject?: string | null; description?: string | null; }
 interface Jozveh { id: string; grade: string; subject: string; title: string; link: string; file_url: string | null; }
 interface CustomUser { id: string; username: string; full_name: string | null; profile_picture: string | null; }
 interface TaklifData { id: string; student_id: string; subject: string; file_url: string; file_name: string; grade: string; status: string; created_at: string; }
