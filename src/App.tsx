@@ -10,6 +10,7 @@ import Admin from "./pages/Admin";
 import Student from "./pages/Student";
 import Parent from "./pages/Parent";
 import PishSabtenam from "./pages/PishSabtenam";
+import ClassRoom from "./pages/ClassRoom";
 import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/student" element={<Student />} />
           <Route path="/parent" element={<Parent />} />
           <Route path="/pish-sabtenam/:id" element={<PishSabtenam />} />
+          <Route path="/class/:classId" element={<ClassRoom />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

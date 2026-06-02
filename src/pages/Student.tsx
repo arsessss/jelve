@@ -25,7 +25,7 @@ import {
 interface StudentData { id: string; full_name: string; grade: string; student_id: string | null; }
 interface GradePeriod { id: string; title: string; grade: string; }
 interface PeriodGrade { id: string; period_id: string; subject: string; grade: string | null; }
-interface OnlineClass { id: string; grade: string; title: string; link: string; }
+interface OnlineClass { id: string; grade: string; title: string; link: string | null; mode: 'internal' | 'external'; is_live: boolean; subject?: string | null; description?: string | null; }
 interface Jozveh { id: string; grade: string; subject: string; title: string; link: string; file_url: string | null; }
 interface CustomUser { id: string; username: string; full_name: string | null; profile_picture: string | null; }
 interface TaklifData { id: string; student_id: string; subject: string; file_url: string; file_name: string; grade: string; status: string; created_at: string; }
@@ -100,6 +100,10 @@ const Student = () => {
       fetchJozveh(studentData.grade);
       fetchGradePeriods(studentData.grade);
       fetchPeriodGrades(studentData.id);
+      const interval = setInterval(() => fetchOnlineClasses(studentData.grade), 8000);
+      const onVis = () => { if (!document.hidden) fetchOnlineClasses(studentData.grade); };
+      document.addEventListener('visibilitychange', onVis);
+      return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis); };
     }
   }, [studentData]);
 
@@ -251,12 +255,41 @@ const Student = () => {
                   <div className="flex items-center gap-3 mb-4"><Video className="w-6 h-6 text-primary" /><h3 className="text-lg font-bold">کلاس‌های آنلاین</h3></div>
                   {onlineClasses.length === 0 ? <p className="text-muted-foreground text-center py-4">کلاسی وجود ندارد</p> : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {onlineClasses.map(cls => (
-                        <div key={cls.id} onClick={() => handleLinkClick(cls.link)} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border hover:bg-muted cursor-pointer transition-all">
-                          <div className="flex items-center gap-3"><Video className="w-5 h-5 text-primary" /><span className="font-medium">{cls.title}</span></div>
-                          <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      ))}
+                      {onlineClasses.map(cls => {
+                        const isInternal = cls.mode === 'internal';
+                        const isLive = isInternal && cls.is_live;
+                        const disabled = isInternal && !isLive;
+                        const onClick = () => {
+                          if (disabled) { toast.info('کلاس هنوز شروع نشده'); return; }
+                          if (isInternal) navigate(`/class/${cls.id}`);
+                          else if (cls.link) handleLinkClick(cls.link);
+                        };
+                        return (
+                          <div
+                            key={cls.id}
+                            onClick={onClick}
+                            className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${disabled ? 'bg-muted/30 border-border cursor-not-allowed opacity-70' : 'bg-muted/50 border-border hover:border-primary cursor-pointer'}`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Video className="w-5 h-5 text-primary shrink-0" />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium truncate">{cls.title}</span>
+                                  {isLive && (
+                                    <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" /> زنده
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {isInternal ? (isLive ? 'برای ورود کلیک کنید' : 'هنوز شروع نشده') : 'لینک خارجی'}
+                                </p>
+                              </div>
+                            </div>
+                            {isInternal ? <Video className="w-4 h-4 text-muted-foreground" /> : <ExternalLink className="w-4 h-4 text-muted-foreground" />}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </Card>
