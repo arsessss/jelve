@@ -131,7 +131,7 @@ const Admin = () => {
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
   const [gradePeriods, setGradePeriods] = useState<GradePeriod[]>([]);
   const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1", role: "student" as "student" | "admin" | "parent", nationalId: "" });
-  const [newClass, setNewClass] = useState({ grade: "7/1", title: "", link: "" });
+  const [newClass, setNewClass] = useState({ grade: "7/1", title: "", link: "", mode: 'internal' as 'internal' | 'external', subject: "", description: "" });
   const [newJozveh, setNewJozveh] = useState({ grade: "7/1", subject: "olom", title: "", targetGrades: [] as string[] });
   const [jozvehFile, setJozvehFile] = useState<File | null>(null);
   const jozvehFileRef = useRef<HTMLInputElement>(null);
