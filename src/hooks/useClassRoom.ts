@@ -309,12 +309,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const sendChat = useCallback((text: string) => {
     const msg: ChatMsg = { id: crypto.randomUUID(), userId, name: displayName, text, ts: Date.now() };
     setChat(prev => [...prev, msg]);
-    send('chat', msg);
+    send('chat', { ...msg });
   }, [userId, displayName, send]);
 
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
     setStrokes(prev => [...prev, stroke]);
-    send('wb-stroke', stroke);
+    send('wb-stroke', { ...stroke });
   }, [send]);
 
   const clearBoard = useCallback(() => {
