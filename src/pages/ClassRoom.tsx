@@ -58,8 +58,9 @@ const ClassRoom = () => {
   useEffect(() => {
     const handler = () => {
       if (classId) {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/online-class-api`;
         navigator.sendBeacon?.(
-          `https://yqnblkvhwrmfjuyvtxji.supabase.co/functions/v1/online-class-api`,
+          url,
           new Blob([JSON.stringify({ token: session?.token, action: 'leave', class_id: classId })], { type: 'application/json' })
         );
       }
