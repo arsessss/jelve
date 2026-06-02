@@ -476,11 +476,40 @@ const Admin = () => {
   const createOnlineClass = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
-      const { error } = await secureApi.insert('online_classes', { grade: newClass.grade, title: newClass.title, link: newClass.link });
+      const payload: Record<string, unknown> = {
+        grade: newClass.grade,
+        title: newClass.title,
+        mode: newClass.mode,
+        subject: newClass.subject || null,
+        description: newClass.description || null,
+      };
+      if (newClass.mode === 'external') payload.link = newClass.link;
+      else payload.link = null;
+      const { error } = await secureApi.insert('online_classes', payload);
       if (error) throw new Error(error);
-      toast.success("کلاس ایجاد شد"); setNewClass({ grade: "7/1", title: "", link: "" }); fetchOnlineClasses();
+      toast.success("کلاس ایجاد شد"); setNewClass({ grade: "7/1", title: "", link: "", mode: 'internal', subject: "", description: "" }); fetchOnlineClasses();
     } catch (e: unknown) { toast.error(e instanceof Error ? e.message : "خطا"); }
     finally { setLoading(false); }
+  };
+
+  const startInternalClass = async (cls: OnlineClass) => {
+    const { error } = await onlineClassApi.start(cls.id);
+    if (error) { toast.error(error); return; }
+    toast.success("کلاس شروع شد");
+    fetchOnlineClasses();
+    navigate(`/class/${cls.id}`);
+  };
+
+  const enterInternalClass = (cls: OnlineClass) => {
+    navigate(`/class/${cls.id}`);
+  };
+
+  const endInternalClass = async (cls: OnlineClass) => {
+    if (!(await confirm("پایان کلاس برای همه؟"))) return;
+    const { error } = await onlineClassApi.end(cls.id);
+    if (error) { toast.error(error); return; }
+    toast.success("کلاس پایان یافت");
+    fetchOnlineClasses();
   };
 
   const deleteOnlineClass = async (id: string) => {
