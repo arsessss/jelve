@@ -891,19 +891,60 @@ const Admin = () => {
                 <Card className="p-6 border-2">
                   <h3 className="text-lg font-bold mb-4"><Plus className="w-5 h-5 inline" /> افزودن کلاس</h3>
                   <form onSubmit={createOnlineClass} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input placeholder="عنوان" value={newClass.title} onChange={e => setNewClass({ ...newClass, title: e.target.value })} required className="text-right" />
-                    <Input placeholder="لینک" value={newClass.link} onChange={e => setNewClass({ ...newClass, link: e.target.value })} required dir="ltr" />
+                    <Input placeholder="عنوان کلاس" value={newClass.title} onChange={e => setNewClass({ ...newClass, title: e.target.value })} required className="text-right" />
+                    <Select value={newClass.mode} onValueChange={v => setNewClass({ ...newClass, mode: v as 'internal' | 'external' })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="internal">داخل سایت (ویدیو + وایت‌برد)</SelectItem>
+                        <SelectItem value="external">لینک خارجی</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Select value={newClass.grade} onValueChange={v => setNewClass({ ...newClass, grade: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{GRADE_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent></Select>
-                    <Button type="submit" disabled={loading}>ایجاد</Button>
+                    <Input placeholder="درس (اختیاری)" value={newClass.subject} onChange={e => setNewClass({ ...newClass, subject: e.target.value })} className="text-right" />
+                    {newClass.mode === 'external' && (
+                      <Input placeholder="لینک" value={newClass.link} onChange={e => setNewClass({ ...newClass, link: e.target.value })} required dir="ltr" className="sm:col-span-2" />
+                    )}
+                    <Input placeholder="توضیح (اختیاری)" value={newClass.description} onChange={e => setNewClass({ ...newClass, description: e.target.value })} className="text-right sm:col-span-2" />
+                    <Button type="submit" disabled={loading} className="sm:col-span-2">ایجاد کلاس</Button>
                   </form>
                 </Card>
                 <Card className="p-6 border-2">
                   <h3 className="text-lg font-bold mb-4">لیست کلاس‌ها</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {onlineClasses.map(cls => (
-                      <div key={cls.id} className="flex justify-between items-center p-4 bg-muted/50 rounded-lg border border-border">
-                        <div className="flex-1 min-w-0"><p className="font-bold truncate">{cls.title}</p><p className="text-sm text-muted-foreground">پایه: {getGradeLabel(cls.grade)}</p></div>
-                        <Button variant="destructive" size="icon" onClick={() => deleteOnlineClass(cls.id)} className="shrink-0 mr-3"><Trash2 className="w-4 h-4" /></Button>
+                      <div key={cls.id} className="p-4 bg-muted/50 rounded-lg border-2 border-border space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold truncate">{cls.title}</p>
+                              {cls.is_live && cls.mode === 'internal' && (
+                                <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" /> زنده
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              پایه: {getGradeLabel(cls.grade)}
+                              {' · '}
+                              {cls.mode === 'internal' ? 'داخل سایت' : 'لینک خارجی'}
+                            </p>
+                          </div>
+                          <Button variant="ghost" size="icon" onClick={() => deleteOnlineClass(cls.id)} className="shrink-0 text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                        </div>
+                        {cls.mode === 'internal' ? (
+                          <div className="flex gap-2">
+                            {cls.is_live ? (
+                              <>
+                                <Button size="sm" onClick={() => enterInternalClass(cls)} className="flex-1 gap-1"><Video className="w-4 h-4" /> ورود به کلاس</Button>
+                                <Button size="sm" variant="outline" onClick={() => endInternalClass(cls)}>پایان</Button>
+                              </>
+                            ) : (
+                              <Button size="sm" onClick={() => startInternalClass(cls)} className="flex-1 gap-1"><Video className="w-4 h-4" /> شروع کلاس</Button>
+                            )}
+                          </div>
+                        ) : (
+                          cls.link && <a href={cls.link} target="_blank" rel="noopener noreferrer" className="block text-sm text-primary underline truncate" dir="ltr">{cls.link}</a>
+                        )}
                       </div>
                     ))}
                     {onlineClasses.length === 0 && <p className="text-center text-muted-foreground py-4 col-span-full">کلاسی وجود ندارد</p>}
