@@ -317,28 +317,73 @@ export type Database = {
           },
         ]
       }
+      online_class_participants: {
+        Row: {
+          class_id: string
+          display_name: string
+          id: string
+          is_teacher: boolean
+          joined_at: string
+          left_at: string | null
+          user_id: string
+        }
+        Insert: {
+          class_id: string
+          display_name: string
+          id?: string
+          is_teacher?: boolean
+          joined_at?: string
+          left_at?: string | null
+          user_id: string
+        }
+        Update: {
+          class_id?: string
+          display_name?: string
+          id?: string
+          is_teacher?: boolean
+          joined_at?: string
+          left_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       online_classes: {
         Row: {
           created_at: string
+          description: string | null
           grade: string
           id: string
-          link: string
+          is_live: boolean
+          link: string | null
+          mode: string
+          started_at: string | null
+          subject: string | null
           title: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          description?: string | null
           grade: string
           id?: string
-          link: string
+          is_live?: boolean
+          link?: string | null
+          mode?: string
+          started_at?: string | null
+          subject?: string | null
           title: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          description?: string | null
           grade?: string
           id?: string
-          link?: string
+          is_live?: boolean
+          link?: string | null
+          mode?: string
+          started_at?: string | null
+          subject?: string | null
           title?: string
           updated_at?: string
         }
