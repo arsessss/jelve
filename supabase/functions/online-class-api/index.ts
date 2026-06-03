@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface Body {
   token: string;
-  action: 'start' | 'end' | 'join' | 'leave' | 'status';
+  action: 'start' | 'end' | 'join' | 'leave' | 'status' | 'report';
   class_id: string;
 }
 
@@ -80,6 +80,15 @@ serve(async (req) => {
 
     if (action === 'status') {
       const { data: parts } = await sb.from('online_class_participants').select('user_id, display_name, is_teacher, joined_at').eq('class_id', class_id).is('left_at', null);
+      return new Response(JSON.stringify({ data: { class: cls, participants: parts || [] } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'report') {
+      if (!isAdmin) return new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const { data: parts } = await sb.from('online_class_participants')
+        .select('user_id, display_name, is_teacher, joined_at, left_at')
+        .eq('class_id', class_id)
+        .order('joined_at', { ascending: true });
       return new Response(JSON.stringify({ data: { class: cls, participants: parts || [] } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

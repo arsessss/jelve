@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { useAkhbar, renderFormattedText, Akhbar } from "@/hooks/use-akhbar";
-import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye, User, Lock, Download, Camera, Pencil } from "lucide-react";
+import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye, User, Lock, Download, Camera, Pencil, ClipboardCheck } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { playNotificationSound } from "@/lib/notification-sound";
@@ -60,6 +60,13 @@ interface OnlineClass {
   is_live: boolean;
   subject?: string | null;
   description?: string | null;
+}
+interface AttendanceEntry {
+  user_id: string;
+  display_name: string;
+  is_teacher: boolean;
+  joined_at: string;
+  left_at: string | null;
 }
 interface Jozveh {
   id: string;
@@ -128,6 +135,9 @@ const Admin = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
+  const [reportClass, setReportClass] = useState<OnlineClass | null>(null);
+  const [reportData, setReportData] = useState<AttendanceEntry[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
   const [gradePeriods, setGradePeriods] = useState<GradePeriod[]>([]);
   const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1", role: "student" as "student" | "admin" | "parent", nationalId: "" });
@@ -516,6 +526,28 @@ const Admin = () => {
     if (!(await confirm("حذف؟"))) return;
     const { error } = await secureApi.delete('online_classes', id);
     if (error) toast.error("خطا"); else { toast.success("حذف شد"); fetchOnlineClasses(); }
+  };
+
+  const openAttendanceReport = async (cls: OnlineClass) => {
+    setReportClass(cls);
+    setReportData([]);
+    setReportLoading(true);
+    const { data, error } = await onlineClassApi.report(cls.id);
+    setReportLoading(false);
+    if (error || !data) { toast.error(error || "خطا در دریافت گزارش"); return; }
+    setReportData(data.participants as AttendanceEntry[]);
+  };
+
+  const formatDateTime = (iso: string) => {
+    try { return new Date(iso).toLocaleString('fa-IR'); } catch { return iso; }
+  };
+  const formatDuration = (a: string, b: string | null) => {
+    const start = new Date(a).getTime();
+    const end = b ? new Date(b).getTime() : Date.now();
+    const mins = Math.max(0, Math.round((end - start) / 60000));
+    if (mins < 60) return `${mins} دقیقه`;
+    const h = Math.floor(mins / 60); const m = mins % 60;
+    return `${h} ساعت ${m} دقیقه`;
   };
 
   const createJozveh = async (e: React.FormEvent) => {
@@ -941,6 +973,9 @@ const Admin = () => {
                             ) : (
                               <Button size="sm" onClick={() => startInternalClass(cls)} className="flex-1 gap-1"><Video className="w-4 h-4" /> شروع کلاس</Button>
                             )}
+                            <Button size="sm" variant="outline" onClick={() => openAttendanceReport(cls)} className="gap-1" title="گزارش حضور">
+                              <ClipboardCheck className="w-4 h-4" />
+                            </Button>
                           </div>
                         ) : (
                           cls.link && <a href={cls.link} target="_blank" rel="noopener noreferrer" className="block text-sm text-primary underline truncate" dir="ltr">{cls.link}</a>
@@ -1204,6 +1239,40 @@ const Admin = () => {
             <div><label className="block text-sm font-medium mb-1">رمز عبور</label><Input type="password" value={editUserForm.password} onChange={e => setEditUserForm({ ...editUserForm, password: e.target.value })} className="text-right" placeholder="بدون تغییر" /></div>
             <Button onClick={handleEditUser} disabled={editUserLoading} className="w-full">{editUserLoading ? "..." : "ذخیره"}</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reportClass} onOpenChange={(o) => { if (!o) { setReportClass(null); setReportData([]); } }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-primary" /> گزارش حضور</DialogTitle>
+            <DialogDescription>{reportClass?.title}</DialogDescription>
+          </DialogHeader>
+          {reportLoading ? (
+            <p className="text-center text-muted-foreground py-6">در حال بارگذاری...</p>
+          ) : reportData.length === 0 ? (
+            <p className="text-center text-muted-foreground py-6">هیچ شرکت‌کننده‌ای ثبت نشده</p>
+          ) : (
+            <div className="space-y-2">
+              {reportData.map((p, i) => (
+                <div key={`${p.user_id}-${i}`} className="flex items-center gap-3 p-3 rounded-lg border-2 border-border bg-muted/30">
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
+                    {p.display_name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold truncate">{p.display_name}</p>
+                      {p.is_teacher && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">معلم</span>}
+                      {!p.left_at && <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" /> آنلاین</span>}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">ورود: {formatDateTime(p.joined_at)}</p>
+                    {p.left_at && <p className="text-xs text-muted-foreground">خروج: {formatDateTime(p.left_at)}</p>}
+                    <p className="text-xs text-primary mt-0.5">مدت: {formatDuration(p.joined_at, p.left_at)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
