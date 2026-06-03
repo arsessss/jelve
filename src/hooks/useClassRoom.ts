@@ -122,6 +122,8 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     pcsRef.current[peerId]?.close();
     delete pcsRef.current[peerId];
     delete peerMetaRef.current[peerId];
+    delete peerStreamsRef.current[peerId];
+    delete screenAudioSendersRef.current[peerId];
     setPeers(prev => {
       const next = { ...prev };
       delete next[peerId];
