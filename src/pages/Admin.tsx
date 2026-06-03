@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { customAuth } from "@/lib/auth";
 import { secureApi } from "@/lib/secure-api";
 import { useAkhbar, renderFormattedText, Akhbar } from "@/hooks/use-akhbar";
-import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye, User, Lock, Download, Camera, Pencil } from "lucide-react";
+import { LogOut, MessageSquare, UserPlus, Trash2, Users, Video, Plus, Settings, BookOpen, Upload, FileText, Send, ShieldCheck, GraduationCap, Calendar, Edit2, Home, Newspaper, Image as ImageIcon, Shield, ClipboardList, Eye, User, Lock, Download, Camera, Pencil, ClipboardCheck } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { playNotificationSound } from "@/lib/notification-sound";
@@ -60,6 +60,13 @@ interface OnlineClass {
   is_live: boolean;
   subject?: string | null;
   description?: string | null;
+}
+interface AttendanceEntry {
+  user_id: string;
+  display_name: string;
+  is_teacher: boolean;
+  joined_at: string;
+  left_at: string | null;
 }
 interface Jozveh {
   id: string;
