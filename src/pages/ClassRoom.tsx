@@ -11,7 +11,7 @@ import { VideoTile } from "@/components/classroom/VideoTile";
 import { Whiteboard } from "@/components/classroom/Whiteboard";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
-  MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power
+  MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand, Check
 } from "lucide-react";
 
 type SidePanel = 'chat' | 'people' | null;
@@ -107,6 +107,18 @@ const ClassRoom = () => {
     setChatInput("");
   };
 
+  const handleShareClick = () => {
+    if (!room.canShare) {
+      toast.error('برای اشتراک صفحه باید معلم اجازه دهد');
+      return;
+    }
+    room.sharing ? room.stopScreenShare() : room.startScreenShare();
+  };
+
+  const handleBoardClick = () => {
+    setMainView(v => v === 'whiteboard' ? 'grid' : 'whiteboard');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -147,6 +159,7 @@ const ClassRoom = () => {
 
   const peerList = Object.values(room.peers);
   const totalCount = peerList.length + 1;
+  const raisedCount = peerList.filter(p => p.handRaised).length + (room.handRaised ? 1 : 0);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden" dir="rtl">
@@ -208,7 +221,7 @@ const ClassRoom = () => {
               strokes={room.strokes}
               onStroke={room.sendStroke}
               onClear={room.clearBoard}
-              canDraw={true}
+              canDraw={room.canDraw}
             />
           )}
         </main>
@@ -258,17 +271,39 @@ const ClassRoom = () => {
                     <p className="font-medium truncate">{joinData?.displayName} (شما)</p>
                     {isTeacher && <p className="text-xs text-primary">معلم</p>}
                   </div>
+                  {room.handRaised && <Hand className="w-4 h-4 text-yellow-500" />}
                 </div>
                 {peerList.map(p => (
-                  <div key={p.userId} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
-                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-bold">
+                  <div key={p.userId} className={cn("flex items-center gap-2 p-2 rounded-lg", p.handRaised ? "bg-yellow-500/15 border border-yellow-500/40" : "bg-muted/50") }>
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-bold shrink-0">
                       {p.displayName.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{p.displayName}</p>
-                      {p.isTeacher && <p className="text-xs text-primary">معلم</p>}
+                      <p className="font-medium truncate text-sm">{p.displayName}</p>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {p.isTeacher && <span className="text-primary">معلم</span>}
+                        {p.handRaised && <span className="text-yellow-600 dark:text-yellow-400 flex items-center gap-1"><Hand className="w-3 h-3" /> دست بلند</span>}
+                      </div>
                     </div>
                     {p.micOn ? <Mic className="w-4 h-4 text-muted-foreground" /> : <MicOff className="w-4 h-4 text-destructive" />}
+                    {isTeacher && !p.isTeacher && (
+                      <div className="flex flex-col gap-1">
+                        <button
+                          title="اجازه‌ی وایت‌برد"
+                          onClick={() => room.setUserDrawPerm(p.userId, !room.drawPerms[p.userId])}
+                          className={cn("p-1 rounded-md transition-all", room.drawPerms[p.userId] ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          title="اجازه‌ی اشتراک صفحه"
+                          onClick={() => room.setUserSharePerm(p.userId, !room.sharePerms[p.userId])}
+                          className={cn("p-1 rounded-md transition-all", room.sharePerms[p.userId] ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}
+                        >
+                          <MonitorUp className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -295,28 +330,44 @@ const ClassRoom = () => {
         />
         <ControlButton
           active={room.sharing}
-          onClick={() => room.sharing ? room.stopScreenShare() : room.startScreenShare()}
+          onClick={handleShareClick}
           icon={room.sharing ? <MonitorX className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
-          label={room.sharing ? "توقف اشتراک" : "اشتراک صفحه"}
+          label={room.sharing ? "توقف اشتراک" : (room.canShare ? "اشتراک صفحه" : "اشتراک صفحه (نیاز به اجازه)")}
+          disabled={!room.canShare && !room.sharing}
         />
         <ControlButton
           active={mainView === 'whiteboard'}
-          onClick={() => setMainView(v => v === 'whiteboard' ? 'grid' : 'whiteboard')}
+          onClick={handleBoardClick}
           icon={<Pencil className="w-5 h-5" />}
           label="وایت‌برد"
         />
+        {!isTeacher && (
+          <ControlButton
+            active={room.handRaised}
+            onClick={room.toggleHand}
+            icon={<Hand className="w-5 h-5" />}
+            label={room.handRaised ? "پایین آوردن دست" : "بالا بردن دست"}
+          />
+        )}
         <ControlButton
           active={sidePanel === 'chat'}
           onClick={() => setSidePanel(p => p === 'chat' ? null : 'chat')}
           icon={<MessageSquare className="w-5 h-5" />}
           label="چت"
         />
-        <ControlButton
-          active={sidePanel === 'people'}
-          onClick={() => setSidePanel(p => p === 'people' ? null : 'people')}
-          icon={<Users className="w-5 h-5" />}
-          label="افراد"
-        />
+        <div className="relative">
+          <ControlButton
+            active={sidePanel === 'people'}
+            onClick={() => setSidePanel(p => p === 'people' ? null : 'people')}
+            icon={<Users className="w-5 h-5" />}
+            label="افراد"
+          />
+          {raisedCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              {raisedCount}
+            </span>
+          )}
+        </div>
         <div className="w-px h-8 bg-border mx-1" />
         {isTeacher && (
           <Button variant="outline" onClick={handleEndClass} className="gap-2">
@@ -331,13 +382,15 @@ const ClassRoom = () => {
   );
 };
 
-function ControlButton({ active, onClick, icon, label, danger }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; danger?: boolean }) {
+function ControlButton({ active, onClick, icon, label, danger, disabled }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; danger?: boolean; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={label}
       className={cn(
         "flex flex-col items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full transition-all duration-300",
+        disabled && "opacity-40 cursor-not-allowed",
         danger ? "bg-destructive/15 text-destructive hover:bg-destructive/25" :
         active ? "bg-primary text-primary-foreground hover:bg-primary/90" :
         "bg-muted text-foreground hover:bg-muted/70"
