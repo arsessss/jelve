@@ -528,6 +528,28 @@ const Admin = () => {
     if (error) toast.error("خطا"); else { toast.success("حذف شد"); fetchOnlineClasses(); }
   };
 
+  const openAttendanceReport = async (cls: OnlineClass) => {
+    setReportClass(cls);
+    setReportData([]);
+    setReportLoading(true);
+    const { data, error } = await onlineClassApi.report(cls.id);
+    setReportLoading(false);
+    if (error || !data) { toast.error(error || "خطا در دریافت گزارش"); return; }
+    setReportData(data.participants as AttendanceEntry[]);
+  };
+
+  const formatDateTime = (iso: string) => {
+    try { return new Date(iso).toLocaleString('fa-IR'); } catch { return iso; }
+  };
+  const formatDuration = (a: string, b: string | null) => {
+    const start = new Date(a).getTime();
+    const end = b ? new Date(b).getTime() : Date.now();
+    const mins = Math.max(0, Math.round((end - start) / 60000));
+    if (mins < 60) return `${mins} دقیقه`;
+    const h = Math.floor(mins / 60); const m = mins % 60;
+    return `${h} ساعت ${m} دقیقه`;
+  };
+
   const createJozveh = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!jozvehFile) { toast.error("فایل انتخاب کنید"); return; }
