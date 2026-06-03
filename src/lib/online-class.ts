@@ -47,4 +47,8 @@ export const onlineClassApi = {
   join: (id: string) => call<JoinResult>('join', id),
   leave: (id: string) => call('leave', id),
   status: (id: string) => call('status', id),
+  report: (id: string) => call<{
+    class: { id: string; title: string; grade: string; subject: string | null };
+    participants: Array<{ user_id: string; display_name: string; is_teacher: boolean; joined_at: string; left_at: string | null }>;
+  }>('report', id),
 };
