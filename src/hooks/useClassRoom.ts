@@ -10,6 +10,7 @@ export interface RemotePeer {
   micOn: boolean;
   camOn: boolean;
   sharing: boolean;
+  handRaised?: boolean;
 }
 
 export interface ChatMsg {
@@ -51,12 +52,24 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const [sharing, setSharing] = useState(false);
   const [connected, setConnected] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  // Permissions: keyed by userId. Teachers always implicitly allowed.
+  const [drawPerms, setDrawPerms] = useState<Record<string, boolean>>({});
+  const [sharePerms, setSharePerms] = useState<Record<string, boolean>>({});
+  const [handRaised, setHandRaised] = useState(false);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerMetaRef = useRef<Record<string, { displayName: string; isTeacher: boolean }>>({});
+  const strokesRef = useRef<WhiteboardStroke[]>([]);
+  const drawPermsRef = useRef<Record<string, boolean>>({});
+  const sharePermsRef = useRef<Record<string, boolean>>({});
+  const isTeacherRef = useRef(isTeacher);
+  useEffect(() => { isTeacherRef.current = isTeacher; }, [isTeacher]);
+  useEffect(() => { strokesRef.current = strokes; }, [strokes]);
+  useEffect(() => { drawPermsRef.current = drawPerms; }, [drawPerms]);
+  useEffect(() => { sharePermsRef.current = sharePerms; }, [sharePerms]);
 
   // Initialize media
   useEffect(() => {
@@ -229,10 +242,37 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       .on('broadcast', { event: 'wb-stroke' }, ({ payload }) => {
         const s = payload as WhiteboardStroke & { from: string };
         if (s.from === userId) return;
+        // Only accept strokes from teachers or explicitly granted users
+        const allowed = peerMetaRef.current[s.from]?.isTeacher || drawPermsRef.current[s.from];
+        if (!allowed) return;
         setStrokes(prev => [...prev, { id: s.id, color: s.color, width: s.width, points: s.points, erase: s.erase }]);
       })
       .on('broadcast', { event: 'wb-clear' }, () => {
         setStrokes([]);
+      })
+      .on('broadcast', { event: 'wb-sync-request' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!isTeacherRef.current) return;
+        if (p.from === userId) return;
+        // Teacher answers with full state targeted at requester
+        send('wb-sync', { to: p.from, strokes: strokesRef.current });
+      })
+      .on('broadcast', { event: 'wb-sync' }, ({ payload }) => {
+        const p = payload as { to: string; strokes: WhiteboardStroke[]; from: string };
+        if (p.to !== userId) return;
+        setStrokes(p.strokes || []);
+      })
+      .on('broadcast', { event: 'perms' }, ({ payload }) => {
+        const p = payload as { from: string; draw: Record<string, boolean>; share: Record<string, boolean> };
+        // Only honor perms broadcast from teachers
+        if (p.from !== userId && !peerMetaRef.current[p.from]?.isTeacher) return;
+        setDrawPerms(p.draw || {});
+        setSharePerms(p.share || {});
+      })
+      .on('broadcast', { event: 'hand' }, ({ payload }) => {
+        const p = payload as { from: string; raised: boolean };
+        if (p.from === userId) return;
+        setPeerState(p.from, { handRaised: p.raised });
       })
       .on('broadcast', { event: 'class-ended' }, () => {
         window.dispatchEvent(new CustomEvent('class-ended'));
@@ -241,6 +281,16 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         if (status === 'SUBSCRIBED') {
           await channel.track({ user_id: userId, displayName, isTeacher });
           setConnected(true);
+          // Ask for current whiteboard + perms state from existing teacher(s)
+          setTimeout(() => {
+            channel.send({ type: 'broadcast', event: 'wb-sync-request', payload: { from: userId } });
+          }, 400);
+          // If I'm teacher, broadcast current perms so newcomers receive them
+          if (isTeacherRef.current) {
+            setTimeout(() => {
+              channel.send({ type: 'broadcast', event: 'perms', payload: { from: userId, draw: drawPermsRef.current, share: sharePermsRef.current } });
+            }, 600);
+          }
         }
       });
 
@@ -281,6 +331,10 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
 
   // Screen share
   const startScreenShare = useCallback(async () => {
+    if (!isTeacherRef.current && !sharePermsRef.current[userId]) {
+      console.warn('screen share denied');
+      return;
+    }
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       screenStreamRef.current = s;
@@ -313,13 +367,43 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, [userId, displayName, send]);
 
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
+    if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
     setStrokes(prev => [...prev, stroke]);
     send('wb-stroke', { ...stroke });
   }, [send]);
 
   const clearBoard = useCallback(() => {
+    if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
     setStrokes([]);
     send('wb-clear', {});
+  }, [send, userId]);
+
+  // Teacher: toggle a student's draw permission
+  const setUserDrawPerm = useCallback((peerId: string, allow: boolean) => {
+    if (!isTeacherRef.current) return;
+    setDrawPerms(prev => {
+      const next = { ...prev, [peerId]: allow };
+      send('perms', { draw: next, share: sharePermsRef.current });
+      return next;
+    });
+  }, [send]);
+
+  const setUserSharePerm = useCallback((peerId: string, allow: boolean) => {
+    if (!isTeacherRef.current) return;
+    setSharePerms(prev => {
+      const next = { ...prev, [peerId]: allow };
+      send('perms', { draw: drawPermsRef.current, share: next });
+      return next;
+    });
+  }, [send]);
+
+  // Hand raise (any participant)
+  const toggleHand = useCallback(() => {
+    setHandRaised(prev => {
+      const next = !prev;
+      send('hand', { raised: next });
+      return next;
+    });
   }, [send]);
 
   const announceEnd = useCallback(() => {
@@ -345,6 +429,11 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     sharing,
     connected,
     mediaError,
+    drawPerms,
+    sharePerms,
+    handRaised,
+    canDraw: isTeacher || !!drawPerms[userId],
+    canShare: isTeacher || !!sharePerms[userId],
     toggleMic,
     toggleCam,
     startScreenShare,
@@ -352,6 +441,9 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     sendChat,
     sendStroke,
     clearBoard,
+    setUserDrawPerm,
+    setUserSharePerm,
+    toggleHand,
     announceEnd,
     cleanup,
   };
