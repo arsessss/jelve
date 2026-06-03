@@ -67,6 +67,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const sharePermsRef = useRef<Record<string, boolean>>({});
   const isTeacherRef = useRef(isTeacher);
   const screenAudioSendersRef = useRef<Record<string, RTCRtpSender>>({});
+  const peerStreamsRef = useRef<Record<string, MediaStream>>({});
   useEffect(() => { isTeacherRef.current = isTeacher; }, [isTeacher]);
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { drawPermsRef.current = drawPerms; }, [drawPerms]);
@@ -140,8 +141,21 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       }
     };
     pc.ontrack = (e) => {
-      const [stream] = e.streams;
-      if (stream) setPeerState(peerId, { stream });
+      // Accumulate tracks into one MediaStream per peer so adding screen audio
+      // doesn't wipe out the existing camera/mic stream.
+      let agg = peerStreamsRef.current[peerId];
+      if (!agg) {
+        agg = new MediaStream();
+        peerStreamsRef.current[peerId] = agg;
+      }
+      if (!agg.getTracks().some(t => t.id === e.track.id)) {
+        agg.addTrack(e.track);
+      }
+      e.track.onended = () => {
+        try { agg.removeTrack(e.track); } catch { /* noop */ }
+        setPeerState(peerId, { stream: new MediaStream(agg.getTracks()) });
+      };
+      setPeerState(peerId, { stream: new MediaStream(agg.getTracks()) });
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
