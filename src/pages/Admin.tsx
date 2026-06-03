@@ -973,6 +973,9 @@ const Admin = () => {
                             ) : (
                               <Button size="sm" onClick={() => startInternalClass(cls)} className="flex-1 gap-1"><Video className="w-4 h-4" /> شروع کلاس</Button>
                             )}
+                            <Button size="sm" variant="outline" onClick={() => openAttendanceReport(cls)} className="gap-1" title="گزارش حضور">
+                              <ClipboardCheck className="w-4 h-4" />
+                            </Button>
                           </div>
                         ) : (
                           cls.link && <a href={cls.link} target="_blank" rel="noopener noreferrer" className="block text-sm text-primary underline truncate" dir="ltr">{cls.link}</a>
