@@ -11,7 +11,7 @@ import { VideoTile } from "@/components/classroom/VideoTile";
 import { Whiteboard } from "@/components/classroom/Whiteboard";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
-  MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand, Check
+  MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand
 } from "lucide-react";
 
 type SidePanel = 'chat' | 'people' | null;
