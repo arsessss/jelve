@@ -135,6 +135,9 @@ const Admin = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
+  const [reportClass, setReportClass] = useState<OnlineClass | null>(null);
+  const [reportData, setReportData] = useState<AttendanceEntry[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
   const [jozvehList, setJozvehList] = useState<Jozveh[]>([]);
   const [gradePeriods, setGradePeriods] = useState<GradePeriod[]>([]);
   const [newStudent, setNewStudent] = useState({ name: "", username: "", password: "", grade: "7/1", role: "student" as "student" | "admin" | "parent", nationalId: "" });
