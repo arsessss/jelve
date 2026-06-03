@@ -1241,6 +1241,40 @@ const Admin = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!reportClass} onOpenChange={(o) => { if (!o) { setReportClass(null); setReportData([]); } }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-primary" /> گزارش حضور</DialogTitle>
+            <DialogDescription>{reportClass?.title}</DialogDescription>
+          </DialogHeader>
+          {reportLoading ? (
+            <p className="text-center text-muted-foreground py-6">در حال بارگذاری...</p>
+          ) : reportData.length === 0 ? (
+            <p className="text-center text-muted-foreground py-6">هیچ شرکت‌کننده‌ای ثبت نشده</p>
+          ) : (
+            <div className="space-y-2">
+              {reportData.map((p, i) => (
+                <div key={`${p.user_id}-${i}`} className="flex items-center gap-3 p-3 rounded-lg border-2 border-border bg-muted/30">
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
+                    {p.display_name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold truncate">{p.display_name}</p>
+                      {p.is_teacher && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">معلم</span>}
+                      {!p.left_at && <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" /> آنلاین</span>}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">ورود: {formatDateTime(p.joined_at)}</p>
+                    {p.left_at && <p className="text-xs text-muted-foreground">خروج: {formatDateTime(p.left_at)}</p>}
+                    <p className="text-xs text-primary mt-0.5">مدت: {formatDuration(p.joined_at, p.left_at)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
     </>
   );
