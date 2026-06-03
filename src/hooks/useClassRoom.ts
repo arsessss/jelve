@@ -66,12 +66,14 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const drawPermsRef = useRef<Record<string, boolean>>({});
   const sharePermsRef = useRef<Record<string, boolean>>({});
   const isTeacherRef = useRef(isTeacher);
+  const screenAudioSendersRef = useRef<Record<string, RTCRtpSender>>({});
+  const peerStreamsRef = useRef<Record<string, MediaStream>>({});
   useEffect(() => { isTeacherRef.current = isTeacher; }, [isTeacher]);
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { drawPermsRef.current = drawPerms; }, [drawPerms]);
   useEffect(() => { sharePermsRef.current = sharePerms; }, [sharePerms]);
 
-  // Initialize media
+  // Initialize media. Students default with camera OFF (mesh-friendly for larger classes).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -83,6 +85,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         if (cancelled) {
           stream.getTracks().forEach(t => t.stop());
           return;
+        }
+        // Students join camera-off and mic-off to keep mesh bandwidth low (works for ~30-40 peers).
+        if (!isTeacherRef.current) {
+          stream.getVideoTracks().forEach(t => { t.enabled = false; });
+          stream.getAudioTracks().forEach(t => { t.enabled = false; });
+          setCamOn(false);
+          setMicOn(false);
         }
         localStreamRef.current = stream;
         setLocalStream(stream);
@@ -113,6 +122,8 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     pcsRef.current[peerId]?.close();
     delete pcsRef.current[peerId];
     delete peerMetaRef.current[peerId];
+    delete peerStreamsRef.current[peerId];
+    delete screenAudioSendersRef.current[peerId];
     setPeers(prev => {
       const next = { ...prev };
       delete next[peerId];
@@ -132,8 +143,21 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       }
     };
     pc.ontrack = (e) => {
-      const [stream] = e.streams;
-      if (stream) setPeerState(peerId, { stream });
+      // Accumulate tracks into one MediaStream per peer so adding screen audio
+      // doesn't wipe out the existing camera/mic stream.
+      let agg = peerStreamsRef.current[peerId];
+      if (!agg) {
+        agg = new MediaStream();
+        peerStreamsRef.current[peerId] = agg;
+      }
+      if (!agg.getTracks().some(t => t.id === e.track.id)) {
+        agg.addTrack(e.track);
+      }
+      e.track.onended = () => {
+        try { agg.removeTrack(e.track); } catch { /* noop */ }
+        setPeerState(peerId, { stream: new MediaStream(agg.getTracks()) });
+      };
+      setPeerState(peerId, { stream: new MediaStream(agg.getTracks()) });
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -155,6 +179,17 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       if (sender) sender.replaceTrack(newTrack);
     });
   }, []);
+
+  // Force renegotiation with one peer (used when adding/removing extra tracks like screen audio)
+  const renegotiate = useCallback(async (peerId: string) => {
+    const pc = pcsRef.current[peerId];
+    if (!pc) return;
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      send('offer', { to: peerId, sdp: offer });
+    } catch (e) { console.error('renegotiate', e); }
+  }, [send]);
 
   // Open Supabase channel + WebRTC mesh after we have local stream
   useEffect(() => {
@@ -336,11 +371,25 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       return;
     }
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const s = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30 } },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
       screenStreamRef.current = s;
       setScreenStream(s);
       const videoTrack = s.getVideoTracks()[0];
       replaceVideoTrack(videoTrack);
+      // Add screen audio (if user shared a tab/system audio) as an extra sender to every peer.
+      const audioTrack = s.getAudioTracks()[0];
+      if (audioTrack) {
+        Object.entries(pcsRef.current).forEach(([peerId, pc]) => {
+          try {
+            const sender = pc.addTrack(audioTrack, s);
+            screenAudioSendersRef.current[peerId] = sender;
+          } catch (e) { console.error('addTrack screen audio', e); }
+        });
+        Object.keys(pcsRef.current).forEach(pid => renegotiate(pid));
+      }
       setSharing(true);
       videoTrack.onended = () => {
         stopScreenShare();
@@ -348,7 +397,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     } catch (e) {
       console.error('screenshare', e);
     }
-  }, [replaceVideoTrack]);
+  }, [replaceVideoTrack, renegotiate, userId]);
 
   const stopScreenShare = useCallback(() => {
     const s = screenStreamRef.current;
@@ -357,8 +406,18 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     setScreenStream(null);
     const camTrack = localStreamRef.current?.getVideoTracks()[0] || null;
     replaceVideoTrack(camTrack);
+    // Remove any screen-audio senders we added
+    Object.entries(screenAudioSendersRef.current).forEach(([peerId, sender]) => {
+      const pc = pcsRef.current[peerId];
+      if (pc) {
+        try { pc.removeTrack(sender); } catch (e) { /* noop */ }
+      }
+    });
+    const peersToRenegotiate = Object.keys(screenAudioSendersRef.current);
+    screenAudioSendersRef.current = {};
+    peersToRenegotiate.forEach(pid => renegotiate(pid));
     setSharing(false);
-  }, [replaceVideoTrack]);
+  }, [replaceVideoTrack, renegotiate]);
 
   const sendChat = useCallback((text: string) => {
     const msg: ChatMsg = { id: crypto.randomUUID(), userId, name: displayName, text, ts: Date.now() };

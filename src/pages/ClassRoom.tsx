@@ -161,74 +161,131 @@ const ClassRoom = () => {
   const totalCount = peerList.length + 1;
   const raisedCount = peerList.filter(p => p.handRaised).length + (room.handRaised ? 1 : 0);
 
+  // Build participant array including self for spotlight logic
+  type Tile = {
+    key: string;
+    stream: MediaStream | null;
+    name: string;
+    isLocal: boolean;
+    micOn: boolean;
+    camOn: boolean;
+    sharing: boolean;
+    isTeacher: boolean;
+  };
+  const selfTile: Tile = {
+    key: 'self',
+    stream: room.localStream,
+    name: joinData?.displayName || 'شما',
+    isLocal: true,
+    micOn: room.micOn,
+    camOn: room.camOn,
+    sharing: room.sharing,
+    isTeacher: !!isTeacher,
+  };
+  const allTiles: Tile[] = [
+    selfTile,
+    ...peerList.map(p => ({
+      key: p.userId,
+      stream: p.stream,
+      name: p.displayName,
+      isLocal: false,
+      micOn: p.micOn,
+      camOn: p.camOn,
+      sharing: p.sharing,
+      isTeacher: p.isTeacher,
+    })),
+  ];
+  // Spotlight: prefer screen sharer, else teacher, else self
+  const sharer = allTiles.find(t => t.sharing);
+  const teacherTile = allTiles.find(t => t.isTeacher);
+  const spotlight = sharer || teacherTile || selfTile;
+  const filmstrip = allTiles.filter(t => t.key !== spotlight.key);
+
   return (
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden" dir="rtl">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-card shrink-0">
+      <header className="flex items-center justify-between px-5 py-3 border-b border-border/60 bg-card/50 backdrop-blur-xl shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-2 h-2 rounded-full bg-destructive animate-pulse shrink-0" />
-          <h1 className="font-bold truncate">{joinData?.class.title}</h1>
-          <span className="text-xs text-muted-foreground hidden sm:inline">پایه {joinData?.class.grade}</span>
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-destructive/10 border border-destructive/30">
+            <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+            <span className="text-[11px] font-bold text-destructive">زنده</span>
+          </div>
+          <div className="min-w-0">
+            <h1 className="font-bold truncate text-sm leading-tight">{joinData?.class.title}</h1>
+            <p className="text-[11px] text-muted-foreground truncate">
+              پایه {joinData?.class.grade}{joinData?.class.subject ? ` • ${joinData.class.subject}` : ''}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Users className="w-4 h-4" />
-          <span>{totalCount}</span>
-          {room.connected ? (
-            <span className="text-xs text-primary mr-2">متصل</span>
-          ) : (
-            <span className="text-xs">در حال اتصال...</span>
-          )}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 border border-border/60 text-sm">
+            <Users className="w-3.5 h-3.5" />
+            <span className="font-semibold">{totalCount}</span>
+          </div>
+          <div className={cn(
+            "hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
+            room.connected ? "bg-primary/10 text-primary border border-primary/30" : "bg-muted text-muted-foreground border border-border/60"
+          )}>
+            <div className={cn("w-1.5 h-1.5 rounded-full", room.connected ? "bg-primary" : "bg-muted-foreground")} />
+            {room.connected ? "متصل" : "در حال اتصال"}
+          </div>
         </div>
       </header>
 
       {/* Main */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0 bg-gradient-to-b from-background to-muted/30">
         {/* Stage */}
-        <main className="flex-1 p-3 min-h-0 overflow-hidden">
-          {mainView === 'grid' ? (
-            <div className={cn(
-              "h-full grid gap-3 auto-rows-fr",
-              totalCount === 1 && "grid-cols-1",
-              totalCount === 2 && "grid-cols-1 md:grid-cols-2",
-              totalCount >= 3 && totalCount <= 4 && "grid-cols-2",
-              totalCount >= 5 && "grid-cols-2 md:grid-cols-3",
-            )}>
-              <VideoTile
-                stream={room.localStream}
-                name={joinData?.displayName || 'شما'}
-                isLocal
-                micOn={room.micOn}
-                camOn={room.camOn}
-                sharing={room.sharing}
-                isTeacher={isTeacher}
-                highlight={isTeacher}
+        <main className="flex-1 flex flex-col p-3 gap-3 min-h-0 overflow-hidden">
+          {/* Spotlight / Whiteboard */}
+          <div className="flex-1 min-h-0">
+            {mainView === 'whiteboard' ? (
+              <Whiteboard
+                strokes={room.strokes}
+                onStroke={room.sendStroke}
+                onClear={room.clearBoard}
+                canDraw={room.canDraw}
               />
-              {peerList.map(p => (
-                <VideoTile
-                  key={p.userId}
-                  stream={p.stream}
-                  name={p.displayName}
-                  micOn={p.micOn}
-                  camOn={p.camOn}
-                  sharing={p.sharing}
-                  isTeacher={p.isTeacher}
-                  highlight={p.isTeacher}
-                />
-              ))}
+            ) : (
+              <VideoTile
+                stream={spotlight.stream}
+                name={spotlight.name}
+                isLocal={spotlight.isLocal}
+                micOn={spotlight.micOn}
+                camOn={spotlight.camOn}
+                sharing={spotlight.sharing}
+                isTeacher={spotlight.isTeacher}
+                highlight={spotlight.isTeacher || spotlight.sharing}
+                featured
+              />
+            )}
+          </div>
+          {/* Filmstrip */}
+          {filmstrip.length > 0 && (
+            <div className="shrink-0 h-24 sm:h-28">
+              <div className="h-full flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {filmstrip.map(t => (
+                  <div key={t.key} className="h-full aspect-video shrink-0">
+                    <VideoTile
+                      stream={t.stream}
+                      name={t.name}
+                      isLocal={t.isLocal}
+                      micOn={t.micOn}
+                      camOn={t.camOn}
+                      sharing={t.sharing}
+                      isTeacher={t.isTeacher}
+                      highlight={t.isTeacher}
+                      compact
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : (
-            <Whiteboard
-              strokes={room.strokes}
-              onStroke={room.sendStroke}
-              onClear={room.clearBoard}
-              canDraw={room.canDraw}
-            />
           )}
         </main>
 
         {/* Side panel */}
         {sidePanel && (
-          <aside className="w-80 border-l border-border bg-card flex flex-col shrink-0 animate-fade-in">
+          <aside className="w-80 border-l border-border/60 bg-card/70 backdrop-blur-xl flex flex-col shrink-0 animate-fade-in">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h2 className="font-bold flex items-center gap-2">
                 {sidePanel === 'chat' ? <><MessageSquare className="w-4 h-4" /> چت کلاس</> : <><Users className="w-4 h-4" /> شرکت‌کنندگان</>}
