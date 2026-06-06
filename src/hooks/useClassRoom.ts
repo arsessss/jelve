@@ -487,6 +487,21 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('wb-clear', {});
   }, [send, userId]);
 
+  // Undo last stroke (teacher only — broadcasts full state via clear+resend would be heavy;
+  // instead we broadcast a state replace using wb-sync semantic).
+  const undoStroke = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setStrokes(prev => {
+      const next = prev.slice(0, -1);
+      // Broadcast as clear + replay
+      send('wb-clear', {});
+      // Resend remaining strokes one-by-one (small overhead, fine for moderate counts)
+      next.forEach(s => send('wb-stroke', { ...s }));
+      strokesRef.current = next;
+      return next;
+    });
+  }, [send]);
+
   // Teacher: toggle a student's draw permission
   const setUserDrawPerm = useCallback((peerId: string, allow: boolean) => {
     if (!isTeacherRef.current) return;
@@ -566,6 +581,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     sendChat,
     sendStroke,
     clearBoard,
+    undoStroke,
     setUserDrawPerm,
     setUserSharePerm,
     toggleHand,
