@@ -432,46 +432,42 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       screenStreamRef.current = s;
       setScreenStream(s);
       const videoTrack = s.getVideoTracks()[0];
-      replaceVideoTrack(videoTrack);
-      // Add screen audio (if user shared a tab/system audio) as an extra sender to every peer.
       const audioTrack = s.getAudioTracks()[0];
-      if (audioTrack) {
-        Object.entries(pcsRef.current).forEach(([peerId, pc]) => {
-          try {
-            const sender = pc.addTrack(audioTrack, s);
-            screenAudioSendersRef.current[peerId] = sender;
-          } catch (e) { console.error('addTrack screen audio', e); }
-        });
-        Object.keys(pcsRef.current).forEach(pid => renegotiate(pid));
-      }
+      // Add screen tracks as ADDITIONAL senders (do not replace camera)
+      Object.entries(pcsRef.current).forEach(([peerId, pc]) => {
+        const arr: RTCRtpSender[] = [];
+        try { arr.push(pc.addTrack(videoTrack, s)); } catch (e) { console.error('addTrack screen video', e); }
+        if (audioTrack) {
+          try { arr.push(pc.addTrack(audioTrack, s)); } catch (e) { console.error('addTrack screen audio', e); }
+        }
+        screenSendersRef.current[peerId] = arr;
+      });
+      Object.keys(pcsRef.current).forEach(pid => renegotiate(pid));
+      // Announce screen stream id so peers can split it from camera
+      send('screen-stream', { streamId: s.id });
       setSharing(true);
-      videoTrack.onended = () => {
-        stopScreenShare();
-      };
+      videoTrack.onended = () => { stopScreenShare(); };
     } catch (e) {
       console.error('screenshare', e);
     }
-  }, [replaceVideoTrack, renegotiate, userId]);
+  }, [renegotiate, userId, send]);
 
   const stopScreenShare = useCallback(() => {
     const s = screenStreamRef.current;
     if (s) s.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
     setScreenStream(null);
-    const camTrack = localStreamRef.current?.getVideoTracks()[0] || null;
-    replaceVideoTrack(camTrack);
-    // Remove any screen-audio senders we added
-    Object.entries(screenAudioSendersRef.current).forEach(([peerId, sender]) => {
+    Object.entries(screenSendersRef.current).forEach(([peerId, senders]) => {
       const pc = pcsRef.current[peerId];
-      if (pc) {
-        try { pc.removeTrack(sender); } catch (e) { /* noop */ }
-      }
+      if (!pc) return;
+      senders.forEach(sender => { try { pc.removeTrack(sender); } catch { /* noop */ } });
     });
-    const peersToRenegotiate = Object.keys(screenAudioSendersRef.current);
-    screenAudioSendersRef.current = {};
+    const peersToRenegotiate = Object.keys(screenSendersRef.current);
+    screenSendersRef.current = {};
     peersToRenegotiate.forEach(pid => renegotiate(pid));
+    send('screen-stream', { streamId: null });
     setSharing(false);
-  }, [replaceVideoTrack, renegotiate]);
+  }, [renegotiate, send]);
 
   const sendChat = useCallback((text: string) => {
     const msg: ChatMsg = { id: crypto.randomUUID(), userId, name: displayName, text, ts: Date.now() };
