@@ -515,6 +515,22 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     });
   }, [send]);
 
+  // Roll-call: teacher starts; students receive popup; students respond.
+  const startRollCall = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setRollCallResponses({});
+    setRollCallActive(true);
+    send('roll-call-start', {});
+  }, [send]);
+  const stopRollCall = useCallback(() => {
+    setRollCallActive(false);
+  }, []);
+  const respondRollCall = useCallback(() => {
+    setRollCallRequest(null);
+    send('roll-call-response', {});
+  }, [send]);
+  const dismissRollCallRequest = useCallback(() => setRollCallRequest(null), []);
+
   const announceEnd = useCallback(() => {
     send('class-ended', {});
   }, [send]);
@@ -553,6 +569,14 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     setUserDrawPerm,
     setUserSharePerm,
     toggleHand,
+    rollCallActive,
+    rollCallRequest,
+    rollCallResponses,
+    startRollCall,
+    stopRollCall,
+    respondRollCall,
+    dismissRollCallRequest,
+    localScreenStream: screenStream,
     announceEnd,
     cleanup,
   };
