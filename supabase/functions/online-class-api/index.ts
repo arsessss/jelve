@@ -8,8 +8,11 @@ const corsHeaders = {
 
 interface Body {
   token: string;
-  action: 'start' | 'end' | 'join' | 'leave' | 'status' | 'report';
+  action: 'start' | 'end' | 'join' | 'leave' | 'status' | 'report' | 'attendance_mark' | 'attendance_list';
   class_id: string;
+  target_user_id?: string;
+  target_display_name?: string;
+  status_value?: 'hazer' | 'ghayeb';
 }
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -32,7 +35,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { token, action, class_id }: Body = await req.json();
+    const { token, action, class_id, target_user_id, target_display_name, status_value }: Body = await req.json();
     if (!token || !action || !class_id) {
       return new Response(JSON.stringify({ error: 'Missing fields' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -90,6 +93,27 @@ serve(async (req) => {
         .eq('class_id', class_id)
         .order('joined_at', { ascending: true });
       return new Response(JSON.stringify({ data: { class: cls, participants: parts || [] } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'attendance_mark') {
+      if (!isAdmin) return new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!target_user_id || !status_value || (status_value !== 'hazer' && status_value !== 'ghayeb')) {
+        return new Response(JSON.stringify({ error: 'Invalid attendance payload' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const name = (target_display_name || '').trim() || 'کاربر';
+      await sb.from('class_attendance').upsert({
+        class_id, user_id: target_user_id, display_name: name,
+        status: status_value, marked_by: userId, marked_at: new Date().toISOString(),
+      }, { onConflict: 'class_id,user_id' });
+      return new Response(JSON.stringify({ data: { ok: true } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'attendance_list') {
+      if (!isAdmin) return new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const { data: rows } = await sb.from('class_attendance')
+        .select('user_id, display_name, status, marked_at')
+        .eq('class_id', class_id);
+      return new Response(JSON.stringify({ data: { class: cls, attendance: rows || [] } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (action === 'join') {

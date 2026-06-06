@@ -51,4 +51,25 @@ export const onlineClassApi = {
     class: { id: string; title: string; grade: string; subject: string | null };
     participants: Array<{ user_id: string; display_name: string; is_teacher: boolean; joined_at: string; left_at: string | null }>;
   }>('report', id),
+  attendanceMark: async (class_id: string, target_user_id: string, target_display_name: string, status_value: 'hazer' | 'ghayeb') => {
+    const session = customAuth.getSession();
+    if (!session) return { error: 'لطفا وارد حساب کاربری شوید' };
+    try {
+      const result = await withRetry(async () => {
+        const { data, error } = await supabase.functions.invoke('online-class-api', {
+          body: { token: session.token, action: 'attendance_mark', class_id, target_user_id, target_display_name, status_value },
+        });
+        if (error) { const body = await extractErrorBody(error); if (body) return body; throw error; }
+        return data;
+      });
+      if (result.error) return { error: result.error };
+      return { data: result.data };
+    } catch (e) {
+      const body = await extractErrorBody(e);
+      return { error: body?.error || 'خطای شبکه' };
+    }
+  },
+  attendanceList: (id: string) => call<{
+    attendance: Array<{ user_id: string; display_name: string; status: 'hazer' | 'ghayeb'; marked_at: string }>;
+  }>('attendance_list', id),
 };
