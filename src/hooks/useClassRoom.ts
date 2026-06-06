@@ -6,7 +6,8 @@ export interface RemotePeer {
   userId: string;
   displayName: string;
   isTeacher: boolean;
-  stream: MediaStream | null;
+  cameraStream: MediaStream | null;
+  screenStream: MediaStream | null;
   micOn: boolean;
   camOn: boolean;
   sharing: boolean;
@@ -27,6 +28,7 @@ export interface WhiteboardStroke {
   width: number;
   points: { x: number; y: number }[];
   erase?: boolean;
+  shape?: 'free' | 'line' | 'rect';
 }
 
 interface UseClassRoomOpts {
@@ -56,6 +58,10 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const [drawPerms, setDrawPerms] = useState<Record<string, boolean>>({});
   const [sharePerms, setSharePerms] = useState<Record<string, boolean>>({});
   const [handRaised, setHandRaised] = useState(false);
+  // Roll-call state
+  const [rollCallActive, setRollCallActive] = useState(false);
+  const [rollCallRequest, setRollCallRequest] = useState<{ from: string; ts: number } | null>(null);
+  const [rollCallResponses, setRollCallResponses] = useState<Record<string, number>>({});
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
@@ -66,8 +72,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const drawPermsRef = useRef<Record<string, boolean>>({});
   const sharePermsRef = useRef<Record<string, boolean>>({});
   const isTeacherRef = useRef(isTeacher);
-  const screenAudioSendersRef = useRef<Record<string, RTCRtpSender>>({});
-  const peerStreamsRef = useRef<Record<string, MediaStream>>({});
+  // Senders we added for screen (per peer): video + optional audio
+  const screenSendersRef = useRef<Record<string, RTCRtpSender[]>>({});
+  // Track which incoming stream.id is the screen stream, per peer
+  const peerScreenStreamIdRef = useRef<Record<string, string | null>>({});
+  // All streams received per peer, bucketed by stream.id
+  const peerStreamsByIdRef = useRef<Record<string, Record<string, MediaStream>>>({});
   useEffect(() => { isTeacherRef.current = isTeacher; }, [isTeacher]);
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { drawPermsRef.current = drawPerms; }, [drawPerms]);
@@ -113,17 +123,39 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const setPeerState = useCallback((peerId: string, patch: Partial<RemotePeer>) => {
     setPeers(prev => {
       const meta = peerMetaRef.current[peerId] || { displayName: 'کاربر', isTeacher: false };
-      const existing = prev[peerId] || { userId: peerId, displayName: meta.displayName, isTeacher: meta.isTeacher, stream: null, micOn: true, camOn: true, sharing: false };
+      const existing = prev[peerId] || { userId: peerId, displayName: meta.displayName, isTeacher: meta.isTeacher, cameraStream: null, screenStream: null, micOn: true, camOn: true, sharing: false };
       return { ...prev, [peerId]: { ...existing, ...patch } };
     });
   }, []);
+
+  // Recompute camera + screen streams from bucketed peer streams
+  const recomputePeerStreams = useCallback((peerId: string) => {
+    const buckets = peerStreamsByIdRef.current[peerId] || {};
+    const screenId = peerScreenStreamIdRef.current[peerId];
+    let cameraStream: MediaStream | null = null;
+    let screenStream: MediaStream | null = null;
+    for (const sid of Object.keys(buckets)) {
+      const st = buckets[sid];
+      const tracks = st.getTracks();
+      if (!tracks.length) continue;
+      if (sid === screenId) {
+        screenStream = new MediaStream(tracks);
+      } else if (!cameraStream) {
+        cameraStream = new MediaStream(tracks);
+      } else {
+        tracks.forEach(t => cameraStream!.addTrack(t));
+      }
+    }
+    setPeerState(peerId, { cameraStream, screenStream, sharing: !!screenStream });
+  }, [setPeerState]);
 
   const removePeer = useCallback((peerId: string) => {
     pcsRef.current[peerId]?.close();
     delete pcsRef.current[peerId];
     delete peerMetaRef.current[peerId];
-    delete peerStreamsRef.current[peerId];
-    delete screenAudioSendersRef.current[peerId];
+    delete peerStreamsByIdRef.current[peerId];
+    delete peerScreenStreamIdRef.current[peerId];
+    delete screenSendersRef.current[peerId];
     setPeers(prev => {
       const next = { ...prev };
       delete next[peerId];
@@ -143,21 +175,19 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       }
     };
     pc.ontrack = (e) => {
-      // Accumulate tracks into one MediaStream per peer so adding screen audio
-      // doesn't wipe out the existing camera/mic stream.
-      let agg = peerStreamsRef.current[peerId];
-      if (!agg) {
-        agg = new MediaStream();
-        peerStreamsRef.current[peerId] = agg;
-      }
-      if (!agg.getTracks().some(t => t.id === e.track.id)) {
-        agg.addTrack(e.track);
-      }
+      const incomingStream = e.streams[0] || new MediaStream([e.track]);
+      const sid = incomingStream.id;
+      const buckets = peerStreamsByIdRef.current[peerId] || (peerStreamsByIdRef.current[peerId] = {});
+      if (!buckets[sid]) buckets[sid] = new MediaStream();
+      const bucket = buckets[sid];
+      if (!bucket.getTracks().some(t => t.id === e.track.id)) bucket.addTrack(e.track);
       e.track.onended = () => {
-        try { agg.removeTrack(e.track); } catch { /* noop */ }
-        setPeerState(peerId, { stream: new MediaStream(agg.getTracks()) });
+        try { bucket.removeTrack(e.track); } catch { /* noop */ }
+        recomputePeerStreams(peerId);
       };
-      setPeerState(peerId, { stream: new MediaStream(agg.getTracks()) });
+      e.track.onmute = () => recomputePeerStreams(peerId);
+      e.track.onunmute = () => recomputePeerStreams(peerId);
+      recomputePeerStreams(peerId);
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -169,16 +199,17 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     if (local) {
       local.getTracks().forEach(t => pc.addTrack(t, local));
     }
+    // If we're already sharing, push screen tracks to the new peer too
+    const sStream = screenStreamRef.current;
+    if (sStream) {
+      const arr: RTCRtpSender[] = [];
+      sStream.getTracks().forEach(t => {
+        try { arr.push(pc.addTrack(t, sStream)); } catch { /* noop */ }
+      });
+      screenSendersRef.current[peerId] = arr;
+    }
     return pc;
-  }, [send, setPeerState]);
-
-  // Replace outgoing video track (camera <-> screen)
-  const replaceVideoTrack = useCallback((newTrack: MediaStreamTrack | null) => {
-    Object.values(pcsRef.current).forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) sender.replaceTrack(newTrack);
-    });
-  }, []);
+  }, [send, recomputePeerStreams]);
 
   // Force renegotiation with one peer (used when adding/removing extra tracks like screen audio)
   const renegotiate = useCallback(async (peerId: string) => {
@@ -309,6 +340,28 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         if (p.from === userId) return;
         setPeerState(p.from, { handRaised: p.raised });
       })
+      .on('broadcast', { event: 'screen-stream' }, ({ payload }) => {
+        const p = payload as { from: string; streamId: string | null };
+        if (p.from === userId) return;
+        peerScreenStreamIdRef.current[p.from] = p.streamId;
+        recomputePeerStreams(p.from);
+      })
+      .on('broadcast', { event: 'screen-stream-request' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (p.from === userId) return;
+        const s = screenStreamRef.current;
+        if (s) send('screen-stream', { streamId: s.id });
+      })
+      .on('broadcast', { event: 'roll-call-start' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        if (isTeacherRef.current) return;
+        setRollCallRequest({ from: p.from, ts: Date.now() });
+      })
+      .on('broadcast', { event: 'roll-call-response' }, ({ payload }) => {
+        const p = payload as { from: string };
+        setRollCallResponses(prev => ({ ...prev, [p.from]: Date.now() }));
+      })
       .on('broadcast', { event: 'class-ended' }, () => {
         window.dispatchEvent(new CustomEvent('class-ended'));
       })
@@ -319,6 +372,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
           // Ask for current whiteboard + perms state from existing teacher(s)
           setTimeout(() => {
             channel.send({ type: 'broadcast', event: 'wb-sync-request', payload: { from: userId } });
+            channel.send({ type: 'broadcast', event: 'screen-stream-request', payload: { from: userId } });
           }, 400);
           // If I'm teacher, broadcast current perms so newcomers receive them
           if (isTeacherRef.current) {
