@@ -80,6 +80,36 @@ export type Database = {
         }
         Relationships: []
       }
+      class_attendance: {
+        Row: {
+          class_id: string
+          display_name: string
+          id: string
+          marked_at: string
+          marked_by: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          class_id: string
+          display_name: string
+          id?: string
+          marked_at?: string
+          marked_by: string
+          status: string
+          user_id: string
+        }
+        Update: {
+          class_id?: string
+          display_name?: string
+          id?: string
+          marked_at?: string
+          marked_by?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contact_messages: {
         Row: {
           created_at: string
