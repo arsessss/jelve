@@ -330,7 +330,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         // Only accept strokes from teachers or explicitly granted users
         const allowed = peerMetaRef.current[s.from]?.isTeacher || drawPermsRef.current[s.from];
         if (!allowed) return;
-        setStrokes(prev => [...prev, { id: s.id, color: s.color, width: s.width, points: s.points, erase: s.erase }]);
+        setStrokes(prev => [...prev, { id: s.id, color: s.color, width: s.width, points: s.points, erase: s.erase, shape: s.shape, text: s.text }]);
       })
       .on('broadcast', { event: 'wb-clear' }, () => {
         setStrokes([]);
