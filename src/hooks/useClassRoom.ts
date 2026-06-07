@@ -538,6 +538,57 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('chat', { ...msg });
   }, [userId, displayName, send]);
 
+  const editChat = useCallback((id: string, text: string) => {
+    setChat(prev => prev.map(m => m.id === id && m.userId === userId ? { ...m, text, editedAt: Date.now() } : m));
+    send('chat-edit', { id, text });
+  }, [userId, send]);
+
+  const deleteChat = useCallback((id: string) => {
+    setChat(prev => prev.map(m => m.id === id && m.userId === userId ? { ...m, deleted: true, text: '' } : m));
+    send('chat-delete', { id });
+  }, [userId, send]);
+
+  const reactChat = useCallback((id: string, emoji: string) => {
+    setChat(prev => prev.map(m => {
+      if (m.id !== id) return m;
+      const reactions = { ...(m.reactions || {}) };
+      const list = new Set(reactions[emoji] || []);
+      if (list.has(userId)) list.delete(userId); else list.add(userId);
+      if (list.size === 0) delete reactions[emoji]; else reactions[emoji] = Array.from(list);
+      return { ...m, reactions };
+    }));
+    send('chat-react', { id, emoji });
+  }, [userId, send]);
+
+  const kickUsers = useCallback((userIds: string[]) => {
+    if (!isTeacherRef.current || !userIds.length) return;
+    send('kick', { userIds });
+  }, [send]);
+
+  const startPoll = useCallback((question: string, options: string[], hidden: boolean) => {
+    if (!isTeacherRef.current) return;
+    const p: Poll = { id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now() };
+    setCurrentPoll(p);
+    setPollVotes({});
+    setMyVote(null);
+    send('poll-start', { ...p });
+  }, [userId, send]);
+
+  const votePoll = useCallback((optionIdx: number) => {
+    if (!currentPoll || myVote !== null) return;
+    setMyVote(optionIdx);
+    setPollVotes(prev => ({ ...prev, [userId]: optionIdx }));
+    send('poll-vote', { id: currentPoll.id, optionIdx });
+  }, [currentPoll, myVote, userId, send]);
+
+  const endPoll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setCurrentPoll(null);
+    setPollVotes({});
+    setMyVote(null);
+    send('poll-end', {});
+  }, [send]);
+
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
     if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
     setStrokes(prev => [...prev, stroke]);
@@ -658,5 +709,16 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     localScreenStream: screenStream,
     announceEnd,
     cleanup,
+    kicked,
+    kickUsers,
+    editChat,
+    deleteChat,
+    reactChat,
+    currentPoll,
+    pollVotes,
+    myVote,
+    startPoll,
+    votePoll,
+    endPoll,
   };
 }
