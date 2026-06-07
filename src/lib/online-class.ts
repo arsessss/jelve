@@ -72,4 +72,7 @@ export const onlineClassApi = {
   attendanceList: (id: string) => call<{
     attendance: Array<{ user_id: string; display_name: string; status: 'hazer' | 'ghayeb'; marked_at: string }>;
   }>('attendance_list', id),
+  roster: (id: string) => call<{
+    students: Array<{ user_id: string; full_name: string }>;
+  }>('roster', id),
 };
