@@ -20,6 +20,9 @@ export interface ChatMsg {
   name: string;
   text: string;
   ts: number;
+  editedAt?: number;
+  deleted?: boolean;
+  reactions?: Record<string, string[]>;
 }
 
 export interface WhiteboardStroke {
@@ -28,7 +31,17 @@ export interface WhiteboardStroke {
   width: number;
   points: { x: number; y: number }[];
   erase?: boolean;
-  shape?: 'free' | 'line' | 'rect';
+  shape?: 'free' | 'line' | 'rect' | 'circle' | 'text';
+  text?: string;
+}
+
+export interface Poll {
+  id: string;
+  question: string;
+  options: string[];
+  hidden: boolean;
+  by: string;
+  ts: number;
 }
 
 interface UseClassRoomOpts {
