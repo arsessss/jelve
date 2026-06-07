@@ -75,6 +75,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const [rollCallActive, setRollCallActive] = useState(false);
   const [rollCallRequest, setRollCallRequest] = useState<{ from: string; ts: number } | null>(null);
   const [rollCallResponses, setRollCallResponses] = useState<Record<string, number>>({});
+  // Poll
+  const [currentPoll, setCurrentPoll] = useState<Poll | null>(null);
+  const [pollVotes, setPollVotes] = useState<Record<string, number>>({});
+  const [myVote, setMyVote] = useState<number | null>(null);
+  // Kicked
+  const [kicked, setKicked] = useState(false);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
