@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface Body {
   token: string;
-  action: 'start' | 'end' | 'join' | 'leave' | 'status' | 'report' | 'attendance_mark' | 'attendance_list';
+  action: 'start' | 'end' | 'join' | 'leave' | 'status' | 'report' | 'attendance_mark' | 'attendance_list' | 'roster';
   class_id: string;
   target_user_id?: string;
   target_display_name?: string;
@@ -114,6 +114,14 @@ serve(async (req) => {
         .select('user_id, display_name, status, marked_at')
         .eq('class_id', class_id);
       return new Response(JSON.stringify({ data: { class: cls, attendance: rows || [] } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'roster') {
+      if (!isAdmin) return new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const { data: roster } = await sb.from('students')
+        .select('user_id, full_name')
+        .eq('grade', cls.grade);
+      return new Response(JSON.stringify({ data: { class: cls, roster: roster || [] } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (action === 'join') {
