@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Eraser, Pencil, Trash2, Undo2, Slash, Square } from "lucide-react";
+import { Eraser, Pencil, Trash2, Undo2, Slash, Square, Circle as CircleIcon, Type } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import type { WhiteboardStroke } from "@/hooks/useClassRoom";
 
@@ -13,7 +14,7 @@ interface Props {
 }
 
 const COLORS = ['#1e1e1e', '#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
-type Tool = 'free' | 'line' | 'rect';
+type Tool = 'free' | 'line' | 'rect' | 'circle' | 'text';
 
 export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -27,12 +28,31 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
 
   const drawStroke = (ctx: CanvasRenderingContext2D, s: WhiteboardStroke, W: number, H: number) => {
     ctx.strokeStyle = s.erase ? '#ffffff' : s.color;
+    ctx.fillStyle = s.erase ? '#ffffff' : s.color;
     ctx.lineWidth = s.width * (s.erase ? 4 : 1);
     const shape = s.shape || 'free';
+    if (shape === 'text' && s.text && s.points[0]) {
+      const fontPx = Math.max(12, s.width * 6);
+      ctx.font = `${fontPx}px Vazirmatn, sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.fillText(s.text, s.points[0].x * W, s.points[0].y * H);
+      return;
+    }
     if (shape === 'rect' && s.points.length >= 2) {
       const a = s.points[0], b = s.points[s.points.length - 1];
       const x = a.x * W, y = a.y * H, w = (b.x - a.x) * W, h = (b.y - a.y) * H;
       ctx.strokeRect(x, y, w, h);
+      return;
+    }
+    if (shape === 'circle' && s.points.length >= 2) {
+      const a = s.points[0], b = s.points[s.points.length - 1];
+      const cx = (a.x + b.x) / 2 * W;
+      const cy = (a.y + b.y) / 2 * H;
+      const rx = Math.abs((b.x - a.x) / 2) * W;
+      const ry = Math.abs((b.y - a.y) / 2) * H;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
       return;
     }
     if (shape === 'line' && s.points.length >= 2) {
@@ -93,6 +113,18 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!canDraw) return;
+    if (tool === 'text') {
+      const pos = getPos(e);
+      const text = window.prompt('متن را وارد کنید:');
+      if (text && text.trim()) {
+        onStroke({
+          id: crypto.randomUUID(),
+          color, width, erase: false, shape: 'text',
+          points: [pos], text: text.trim(),
+        });
+      }
+      return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
     drawingRef.current = { id: crypto.randomUUID(), points: [getPos(e)] };
   };
@@ -141,13 +173,15 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
   };
 
   return (
-    <div className="flex flex-col gap-2 h-full animate-fade-in">
+    <div className="flex flex-col gap-2 h-full animate-fade-in min-h-0">
       {canDraw && (
-        <div className="flex flex-wrap items-center gap-2 p-2 bg-card/80 backdrop-blur-md rounded-xl border border-border shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 p-2 bg-card/80 backdrop-blur-md rounded-xl border border-border shadow-sm shrink-0">
           <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50">
             <button onClick={() => { setTool('free'); setErasing(false); }} title="آزاد" className={cn("p-1.5 rounded-md transition-all", tool === 'free' && !erasing ? "bg-primary text-primary-foreground shadow" : "hover:bg-muted")}><Pencil className="w-4 h-4" /></button>
             <button onClick={() => { setTool('line'); setErasing(false); }} title="خط" className={cn("p-1.5 rounded-md transition-all", tool === 'line' && !erasing ? "bg-primary text-primary-foreground shadow" : "hover:bg-muted")}><Slash className="w-4 h-4" /></button>
             <button onClick={() => { setTool('rect'); setErasing(false); }} title="مستطیل" className={cn("p-1.5 rounded-md transition-all", tool === 'rect' && !erasing ? "bg-primary text-primary-foreground shadow" : "hover:bg-muted")}><Square className="w-4 h-4" /></button>
+            <button onClick={() => { setTool('circle'); setErasing(false); }} title="دایره" className={cn("p-1.5 rounded-md transition-all", tool === 'circle' && !erasing ? "bg-primary text-primary-foreground shadow" : "hover:bg-muted")}><CircleIcon className="w-4 h-4" /></button>
+            <button onClick={() => { setTool('text'); setErasing(false); }} title="متن" className={cn("p-1.5 rounded-md transition-all", tool === 'text' && !erasing ? "bg-primary text-primary-foreground shadow" : "hover:bg-muted")}><Type className="w-4 h-4" /></button>
             <button onClick={() => { setErasing(true); setTool('free'); }} title="پاک‌کن" className={cn("p-1.5 rounded-md transition-all", erasing ? "bg-primary text-primary-foreground shadow" : "hover:bg-muted")}><Eraser className="w-4 h-4" /></button>
           </div>
           <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50">
@@ -160,10 +194,13 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
               />
             ))}
           </div>
-          <div className="flex items-center gap-2 px-2">
-            <span className="text-xs text-muted-foreground">ضخامت</span>
-            <input type="range" min={1} max={20} value={width} onChange={e => setWidth(Number(e.target.value))} className="w-24 accent-primary" />
-            <span className="text-xs font-mono text-muted-foreground w-5">{width}</span>
+          <div className="flex items-center gap-3 px-3 py-1 rounded-lg bg-muted/50 min-w-[180px]">
+            <span className="text-xs text-muted-foreground shrink-0">ضخامت</span>
+            <Slider value={[width]} min={1} max={30} step={1} onValueChange={v => setWidth(v[0])} className="w-28" />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className="rounded-full bg-foreground" style={{ width: Math.min(width, 18), height: Math.min(width, 18) }} />
+              <span className="text-xs font-mono text-muted-foreground w-5 text-center">{width}</span>
+            </div>
           </div>
           {onUndo && <Button size="sm" variant="outline" onClick={onUndo} className="gap-1"><Undo2 className="w-4 h-4" /> برگشت</Button>}
           <Button size="sm" variant="outline" onClick={onClear} className="gap-1"><Trash2 className="w-4 h-4" /> پاک کردن همه</Button>
