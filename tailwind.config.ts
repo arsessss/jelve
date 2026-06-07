@@ -101,6 +101,18 @@ export default {
             transform: "translateY(0)",
           },
         },
+        "slide-down": {
+          from: { opacity: "1", transform: "translateY(0)" },
+          to: { opacity: "0", transform: "translateY(20px)" },
+        },
+        "fade-out": {
+          from: { opacity: "1" },
+          to: { opacity: "0" },
+        },
+        "scale-out": {
+          from: { opacity: "1", transform: "scale(1)" },
+          to: { opacity: "0", transform: "scale(0.95)" },
+        },
         "scale-in": {
           from: {
             opacity: "0",
@@ -134,6 +146,9 @@ export default {
         "fade-in": "fade-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards",
         "slide-up": "slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards",
         "scale-in": "scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+        "scale-out": "scale-out 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+        "fade-out": "fade-out 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+        "slide-down": "slide-down 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards",
         "float": "float 3s ease-in-out infinite",
         "shimmer": "shimmer 2s linear infinite",
       },

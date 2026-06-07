@@ -20,6 +20,9 @@ export interface ChatMsg {
   name: string;
   text: string;
   ts: number;
+  editedAt?: number;
+  deleted?: boolean;
+  reactions?: Record<string, string[]>;
 }
 
 export interface WhiteboardStroke {
@@ -28,7 +31,17 @@ export interface WhiteboardStroke {
   width: number;
   points: { x: number; y: number }[];
   erase?: boolean;
-  shape?: 'free' | 'line' | 'rect';
+  shape?: 'free' | 'line' | 'rect' | 'circle' | 'text';
+  text?: string;
+}
+
+export interface Poll {
+  id: string;
+  question: string;
+  options: string[];
+  hidden: boolean;
+  by: string;
+  ts: number;
 }
 
 interface UseClassRoomOpts {
@@ -62,6 +75,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const [rollCallActive, setRollCallActive] = useState(false);
   const [rollCallRequest, setRollCallRequest] = useState<{ from: string; ts: number } | null>(null);
   const [rollCallResponses, setRollCallResponses] = useState<Record<string, number>>({});
+  // Poll
+  const [currentPoll, setCurrentPoll] = useState<Poll | null>(null);
+  const [pollVotes, setPollVotes] = useState<Record<string, number>>({});
+  const [myVote, setMyVote] = useState<number | null>(null);
+  // Kicked
+  const [kicked, setKicked] = useState(false);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
@@ -305,13 +324,57 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         const m = payload as ChatMsg & { from: string };
         setChat(prev => [...prev, { id: m.id, userId: m.userId, name: m.name, text: m.text, ts: m.ts }]);
       })
+      .on('broadcast', { event: 'chat-edit' }, ({ payload }) => {
+        const p = payload as { id: string; text: string; from: string };
+        setChat(prev => prev.map(m => m.id === p.id && m.userId === p.from ? { ...m, text: p.text, editedAt: Date.now() } : m));
+      })
+      .on('broadcast', { event: 'chat-delete' }, ({ payload }) => {
+        const p = payload as { id: string; from: string };
+        setChat(prev => prev.map(m => m.id === p.id && m.userId === p.from ? { ...m, deleted: true, text: '' } : m));
+      })
+      .on('broadcast', { event: 'chat-react' }, ({ payload }) => {
+        const p = payload as { id: string; emoji: string; from: string };
+        setChat(prev => prev.map(m => {
+          if (m.id !== p.id) return m;
+          const reactions = { ...(m.reactions || {}) };
+          const list = new Set(reactions[p.emoji] || []);
+          if (list.has(p.from)) list.delete(p.from); else list.add(p.from);
+          if (list.size === 0) delete reactions[p.emoji]; else reactions[p.emoji] = Array.from(list);
+          return { ...m, reactions };
+        }));
+      })
+      .on('broadcast', { event: 'kick' }, ({ payload }) => {
+        const p = payload as { from: string; userIds: string[] };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        if (p.userIds.includes(userId) && !isTeacherRef.current) {
+          setKicked(true);
+        }
+      })
+      .on('broadcast', { event: 'poll-start' }, ({ payload }) => {
+        const p = payload as Poll & { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setCurrentPoll({ id: p.id, question: p.question, options: p.options, hidden: p.hidden, by: p.by, ts: p.ts });
+        setPollVotes({});
+        setMyVote(null);
+      })
+      .on('broadcast', { event: 'poll-vote' }, ({ payload }) => {
+        const p = payload as { id: string; optionIdx: number; from: string };
+        setPollVotes(prev => ({ ...prev, [p.from]: p.optionIdx }));
+      })
+      .on('broadcast', { event: 'poll-end' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setCurrentPoll(null);
+        setPollVotes({});
+        setMyVote(null);
+      })
       .on('broadcast', { event: 'wb-stroke' }, ({ payload }) => {
         const s = payload as WhiteboardStroke & { from: string };
         if (s.from === userId) return;
         // Only accept strokes from teachers or explicitly granted users
         const allowed = peerMetaRef.current[s.from]?.isTeacher || drawPermsRef.current[s.from];
         if (!allowed) return;
-        setStrokes(prev => [...prev, { id: s.id, color: s.color, width: s.width, points: s.points, erase: s.erase }]);
+        setStrokes(prev => [...prev, { id: s.id, color: s.color, width: s.width, points: s.points, erase: s.erase, shape: s.shape, text: s.text }]);
       })
       .on('broadcast', { event: 'wb-clear' }, () => {
         setStrokes([]);
@@ -475,6 +538,57 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('chat', { ...msg });
   }, [userId, displayName, send]);
 
+  const editChat = useCallback((id: string, text: string) => {
+    setChat(prev => prev.map(m => m.id === id && m.userId === userId ? { ...m, text, editedAt: Date.now() } : m));
+    send('chat-edit', { id, text });
+  }, [userId, send]);
+
+  const deleteChat = useCallback((id: string) => {
+    setChat(prev => prev.map(m => m.id === id && m.userId === userId ? { ...m, deleted: true, text: '' } : m));
+    send('chat-delete', { id });
+  }, [userId, send]);
+
+  const reactChat = useCallback((id: string, emoji: string) => {
+    setChat(prev => prev.map(m => {
+      if (m.id !== id) return m;
+      const reactions = { ...(m.reactions || {}) };
+      const list = new Set(reactions[emoji] || []);
+      if (list.has(userId)) list.delete(userId); else list.add(userId);
+      if (list.size === 0) delete reactions[emoji]; else reactions[emoji] = Array.from(list);
+      return { ...m, reactions };
+    }));
+    send('chat-react', { id, emoji });
+  }, [userId, send]);
+
+  const kickUsers = useCallback((userIds: string[]) => {
+    if (!isTeacherRef.current || !userIds.length) return;
+    send('kick', { userIds });
+  }, [send]);
+
+  const startPoll = useCallback((question: string, options: string[], hidden: boolean) => {
+    if (!isTeacherRef.current) return;
+    const p: Poll = { id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now() };
+    setCurrentPoll(p);
+    setPollVotes({});
+    setMyVote(null);
+    send('poll-start', { ...p });
+  }, [userId, send]);
+
+  const votePoll = useCallback((optionIdx: number) => {
+    if (!currentPoll || myVote !== null) return;
+    setMyVote(optionIdx);
+    setPollVotes(prev => ({ ...prev, [userId]: optionIdx }));
+    send('poll-vote', { id: currentPoll.id, optionIdx });
+  }, [currentPoll, myVote, userId, send]);
+
+  const endPoll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setCurrentPoll(null);
+    setPollVotes({});
+    setMyVote(null);
+    send('poll-end', {});
+  }, [send]);
+
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
     if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
     setStrokes(prev => [...prev, stroke]);
@@ -595,5 +709,16 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     localScreenStream: screenStream,
     announceEnd,
     cleanup,
+    kicked,
+    kickUsers,
+    editChat,
+    deleteChat,
+    reactChat,
+    currentPoll,
+    pollVotes,
+    myVote,
+    startPoll,
+    votePoll,
+    endPoll,
   };
 }

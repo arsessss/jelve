@@ -3,6 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { customAuth, AuthSession } from "@/lib/auth";
 import { onlineClassApi, JoinResult } from "@/lib/online-class";
@@ -12,7 +15,7 @@ import { Whiteboard } from "@/components/classroom/Whiteboard";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
   MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand,
-  ClipboardCheck, Check, UserX
+  ClipboardCheck, Check, BarChart3, Smile, Trash2, Edit2, MoreHorizontal, Plus
 } from "lucide-react";
 
 type SidePanel = 'chat' | 'people' | null;
@@ -28,8 +31,11 @@ interface Tile {
   sharing: boolean;
   isTeacher: boolean;
   handRaised?: boolean;
-  audioOnly?: boolean;
 }
+
+interface RosterEntry { user_id: string; full_name: string }
+
+const REACTIONS = ['👍', '❤️', '😂', '😮', '🎉'];
 
 const ClassRoom = () => {
   const { classId } = useParams<{ classId: string }>();
@@ -41,7 +47,13 @@ const ClassRoom = () => {
   const [sidePanel, setSidePanel] = useState<SidePanel>(null);
   const [mainView, setMainView] = useState<MainView>('grid');
   const [chatInput, setChatInput] = useState("");
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [reactPickerFor, setReactPickerFor] = useState<string | null>(null);
   const [attendanceMarks, setAttendanceMarks] = useState<Record<string, 'hazer' | 'ghayeb'>>({});
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
+  const [rollCallSecondsLeft, setRollCallSecondsLeft] = useState(0);
+  const [pollOpen, setPollOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,9 +103,12 @@ const ClassRoom = () => {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [room.chat]);
 
-  // Load existing attendance for teacher when opening panel
+  // Load roster + saved attendance when teacher opens panel
   useEffect(() => {
     if (!isTeacher || !classId || sidePanel !== 'people') return;
+    onlineClassApi.roster(classId).then(({ data }) => {
+      if (data?.roster) setRoster(data.roster);
+    });
     onlineClassApi.attendanceList(classId).then(({ data }) => {
       if (data?.attendance) {
         const map: Record<string, 'hazer' | 'ghayeb'> = {};
@@ -102,6 +117,23 @@ const ClassRoom = () => {
       }
     });
   }, [isTeacher, classId, sidePanel]);
+
+  // Kicked students auto-leave
+  useEffect(() => {
+    if (room.kicked) {
+      toast.error('شما به دلیل عدم پاسخ به حضور و غیاب از کلاس خارج شدید');
+      handleLeave();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.kicked]);
+
+  // Roll-call countdown for teacher + auto-finalize
+  useEffect(() => {
+    if (!isTeacher || !room.rollCallActive) { setRollCallSecondsLeft(0); return; }
+    setRollCallSecondsLeft(30);
+    const t = setInterval(() => setRollCallSecondsLeft(s => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [isTeacher, room.rollCallActive]);
 
   const handleLeave = async () => {
     room.cleanup();
@@ -132,10 +164,36 @@ const ClassRoom = () => {
 
   const handleBoardClick = () => setMainView(v => v === 'whiteboard' ? 'grid' : 'whiteboard');
 
-  const startRollCall = () => {
+  // Start roll-call: load roster, broadcast, start timer; finalize at end
+  const startRollCall = async () => {
+    if (!classId) return;
+    let rosterList = roster;
+    if (!rosterList.length) {
+      const { data } = await onlineClassApi.roster(classId);
+      if (data?.roster) { rosterList = data.roster; setRoster(data.roster); }
+    }
     room.startRollCall();
     toast.info('درخواست حضور و غیاب ارسال شد. ۳۰ ثانیه فرصت پاسخ.');
-    setTimeout(() => room.stopRollCall(), 30_000);
+    setTimeout(() => finalizeRollCall(rosterList), 30_000);
+  };
+
+  const finalizeRollCall = async (rosterList: RosterEntry[]) => {
+    if (!classId) return;
+    room.stopRollCall();
+    const responses = room.rollCallResponses;
+    const newMarks: Record<string, 'hazer' | 'ghayeb'> = { ...attendanceMarks };
+    const ghayebIds: string[] = [];
+    for (const r of rosterList) {
+      const status: 'hazer' | 'ghayeb' = responses[r.user_id] ? 'hazer' : 'ghayeb';
+      newMarks[r.user_id] = status;
+      if (status === 'ghayeb') ghayebIds.push(r.user_id);
+      onlineClassApi.attendanceMark(classId, r.user_id, r.full_name, status);
+    }
+    setAttendanceMarks(newMarks);
+    // Kick ghayeb students who are connected
+    const connectedGhayeb = ghayebIds.filter(id => room.peers[id]);
+    if (connectedGhayeb.length) room.kickUsers(connectedGhayeb);
+    toast.success(`حضور و غیاب ثبت شد. حاضرین: ${rosterList.length - ghayebIds.length}، غایبین: ${ghayebIds.length}`);
   };
 
   const markAttendance = async (userId: string, name: string, status: 'hazer' | 'ghayeb') => {
@@ -145,8 +203,8 @@ const ClassRoom = () => {
     if (error) {
       toast.error(error);
       setAttendanceMarks(prev => { const n = { ...prev }; delete n[userId]; return n; });
-    } else {
-      toast.success(status === 'hazer' ? 'حاضر ثبت شد' : 'غایب ثبت شد');
+    } else if (status === 'ghayeb' && room.peers[userId]) {
+      room.kickUsers([userId]);
     }
   };
 
@@ -184,55 +242,18 @@ const ClassRoom = () => {
   const totalCount = peerList.length + 1;
   const raisedCount = peerList.filter(p => p.handRaised).length + (room.handRaised ? 1 : 0);
 
-  // Build tiles: each participant gets a camera tile; if sharing, also a screen tile.
   const tiles: Tile[] = [];
-  // Self
   tiles.push({
-    key: 'self-cam',
-    stream: room.localStream,
-    name: joinData?.displayName || 'شما',
-    isLocal: true,
-    micOn: room.micOn,
-    camOn: room.camOn,
-    sharing: false,
-    isTeacher: !!isTeacher,
-    handRaised: room.handRaised,
+    key: 'self-cam', stream: room.localStream, name: joinData?.displayName || 'شما', isLocal: true,
+    micOn: room.micOn, camOn: room.camOn, sharing: false, isTeacher: !!isTeacher, handRaised: room.handRaised,
   });
   if (room.sharing && room.localScreenStream) {
-    tiles.push({
-      key: 'self-screen',
-      stream: room.localScreenStream,
-      name: (joinData?.displayName || 'شما') + ' — صفحه',
-      isLocal: true,
-      micOn: false,
-      camOn: false,
-      sharing: true,
-      isTeacher: !!isTeacher,
-    });
+    tiles.push({ key: 'self-screen', stream: room.localScreenStream, name: (joinData?.displayName || 'شما') + ' — صفحه', isLocal: true, micOn: false, camOn: false, sharing: true, isTeacher: !!isTeacher });
   }
   peerList.forEach(p => {
-    tiles.push({
-      key: `${p.userId}-cam`,
-      stream: p.cameraStream,
-      name: p.displayName,
-      isLocal: false,
-      micOn: p.micOn,
-      camOn: p.camOn,
-      sharing: false,
-      isTeacher: p.isTeacher,
-      handRaised: p.handRaised,
-    });
+    tiles.push({ key: `${p.userId}-cam`, stream: p.cameraStream, name: p.displayName, isLocal: false, micOn: p.micOn, camOn: p.camOn, sharing: false, isTeacher: p.isTeacher, handRaised: p.handRaised });
     if (p.screenStream) {
-      tiles.push({
-        key: `${p.userId}-screen`,
-        stream: p.screenStream,
-        name: p.displayName + ' — صفحه',
-        isLocal: false,
-        micOn: false,
-        camOn: false,
-        sharing: true,
-        isTeacher: p.isTeacher,
-      });
+      tiles.push({ key: `${p.userId}-screen`, stream: p.screenStream, name: p.displayName + ' — صفحه', isLocal: false, micOn: false, camOn: false, sharing: true, isTeacher: p.isTeacher });
     }
   });
 
@@ -240,6 +261,35 @@ const ClassRoom = () => {
   const teacherTile = tiles.find(t => t.isTeacher && !t.sharing);
   const spotlight = sharer || teacherTile || tiles[0];
   const filmstrip = tiles.filter(t => t.key !== spotlight.key);
+
+  // Build attendance list for the people panel
+  // For teacher: roster + currently-online (online users not in roster)
+  // For student: just the live participants
+  const peopleEntries = (() => {
+    if (!isTeacher) {
+      return [{ user_id: joinData?.userId || 'me', full_name: joinData?.displayName || 'شما', isMe: true, isOnline: true, isTeacher: true, handRaised: room.handRaised, micOn: room.micOn },
+      ...peerList.map(p => ({ user_id: p.userId, full_name: p.displayName, isMe: false, isOnline: true, isTeacher: p.isTeacher, handRaised: !!p.handRaised, micOn: p.micOn }))];
+    }
+    const onlineMap: Record<string, { isTeacher: boolean; handRaised: boolean; micOn: boolean }> = {};
+    onlineMap[joinData!.userId] = { isTeacher: true, handRaised: room.handRaised, micOn: room.micOn };
+    peerList.forEach(p => { onlineMap[p.userId] = { isTeacher: p.isTeacher, handRaised: !!p.handRaised, micOn: p.micOn }; });
+    const rosterMap = new Map(roster.map(r => [r.user_id, r]));
+    const rows: Array<{ user_id: string; full_name: string; isOnline: boolean; isTeacher: boolean; handRaised: boolean; micOn: boolean; isMe?: boolean }> = [];
+    // include teacher self
+    rows.push({ user_id: joinData!.userId, full_name: joinData!.displayName + ' (شما)', isOnline: true, isTeacher: true, handRaised: room.handRaised, micOn: room.micOn, isMe: true });
+    // include roster
+    for (const r of roster) {
+      const meta = onlineMap[r.user_id];
+      rows.push({ user_id: r.user_id, full_name: r.full_name, isOnline: !!meta, isTeacher: false, handRaised: meta?.handRaised || false, micOn: meta?.micOn || false });
+    }
+    // include online users not in roster (guests / other teachers)
+    for (const p of peerList) {
+      if (!rosterMap.has(p.userId)) {
+        rows.push({ user_id: p.userId, full_name: p.displayName, isOnline: true, isTeacher: p.isTeacher, handRaised: !!p.handRaised, micOn: p.micOn });
+      }
+    }
+    return rows;
+  })();
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden" dir="rtl">
@@ -275,64 +325,71 @@ const ClassRoom = () => {
       {/* Main */}
       <div className="flex-1 flex min-h-0 bg-gradient-to-b from-background to-muted/30">
         <main className="flex-1 flex flex-col p-3 gap-3 min-h-0 overflow-hidden">
-          <div className="flex-1 min-h-0">
-            {mainView === 'whiteboard' ? (
-              <Whiteboard
-                strokes={room.strokes}
-                onStroke={room.sendStroke}
-                onClear={room.clearBoard}
-                onUndo={isTeacher ? room.undoStroke : undefined}
-                canDraw={room.canDraw}
-              />
-            ) : (
-              <div key={spotlight.key} className="h-full">
-                <VideoTile
-                  stream={spotlight.stream}
-                  name={spotlight.name}
-                  isLocal={spotlight.isLocal}
-                  micOn={spotlight.micOn}
-                  camOn={spotlight.camOn}
-                  sharing={spotlight.sharing}
-                  isTeacher={spotlight.isTeacher}
-                  highlight={spotlight.isTeacher || spotlight.sharing}
-                  handRaised={spotlight.handRaised}
-                  featured
+          {mainView === 'whiteboard' ? (
+            // Split layout: whiteboard (70%) + video column (30%) — so you can still see participants
+            <div className="flex-1 flex gap-3 min-h-0 animate-fade-in">
+              <div className="flex-1 min-w-0">
+                <Whiteboard
+                  strokes={room.strokes}
+                  onStroke={room.sendStroke}
+                  onClear={room.clearBoard}
+                  onUndo={isTeacher ? room.undoStroke : undefined}
+                  canDraw={room.canDraw}
                 />
               </div>
-            )}
-          </div>
-          {filmstrip.length > 0 && (
-            <div className="shrink-0 h-24 sm:h-28">
-              <div className="h-full flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {filmstrip.map(t => (
-                  <div key={t.key} className="h-full aspect-video shrink-0">
+              <div className="w-56 shrink-0 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+                {tiles.map(t => (
+                  <div key={t.key} className="shrink-0 animate-scale-in">
                     <VideoTile
-                      stream={t.stream}
-                      name={t.name}
-                      isLocal={t.isLocal}
-                      micOn={t.micOn}
-                      camOn={t.camOn}
-                      sharing={t.sharing}
-                      isTeacher={t.isTeacher}
-                      highlight={t.isTeacher || t.sharing}
+                      stream={t.stream} name={t.name} isLocal={t.isLocal}
+                      micOn={t.micOn} camOn={t.camOn} sharing={t.sharing}
+                      isTeacher={t.isTeacher} highlight={t.isTeacher || t.sharing}
                       handRaised={t.handRaised}
-                      compact
                     />
                   </div>
                 ))}
               </div>
             </div>
+          ) : (
+            <>
+              <div className="flex-1 min-h-0">
+                <div key={spotlight.key} className="h-full animate-scale-in">
+                  <VideoTile
+                    stream={spotlight.stream} name={spotlight.name} isLocal={spotlight.isLocal}
+                    micOn={spotlight.micOn} camOn={spotlight.camOn} sharing={spotlight.sharing}
+                    isTeacher={spotlight.isTeacher} highlight={spotlight.isTeacher || spotlight.sharing}
+                    handRaised={spotlight.handRaised} featured
+                  />
+                </div>
+              </div>
+              {filmstrip.length > 0 && (
+                <div className="shrink-0 h-24 sm:h-28 animate-slide-up">
+                  <div className="h-full flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                    {filmstrip.map(t => (
+                      <div key={t.key} className="h-full aspect-video shrink-0 animate-scale-in">
+                        <VideoTile
+                          stream={t.stream} name={t.name} isLocal={t.isLocal}
+                          micOn={t.micOn} camOn={t.camOn} sharing={t.sharing}
+                          isTeacher={t.isTeacher} highlight={t.isTeacher || t.sharing}
+                          handRaised={t.handRaised} compact
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </main>
 
         {/* Side panel */}
         {sidePanel && (
-          <aside className="w-80 border-l border-border/60 bg-card/70 backdrop-blur-xl flex flex-col shrink-0 animate-slide-up">
+          <aside className="w-[26rem] max-w-[90vw] border-l border-border/60 bg-card/70 backdrop-blur-xl flex flex-col shrink-0 animate-slide-up">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h2 className="font-bold flex items-center gap-2">
                 {sidePanel === 'chat'
                   ? <><MessageSquare className="w-4 h-4 text-primary" /> چت کلاس</>
-                  : <><Users className="w-4 h-4 text-primary" /> شرکت‌کنندگان</>}
+                  : <><Users className="w-4 h-4 text-primary" /> {isTeacher ? 'حضور و غیاب' : 'شرکت‌کنندگان'}</>}
               </h2>
               <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
                 <X className="w-4 h-4" />
@@ -340,7 +397,7 @@ const ClassRoom = () => {
             </div>
             {sidePanel === 'chat' ? (
               <>
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 scrollbar-hide">
+                <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 scrollbar-hide">
                   {room.chat.length === 0 ? (
                     <div className="text-center py-10 animate-fade-in">
                       <MessageSquare className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
@@ -348,19 +405,68 @@ const ClassRoom = () => {
                     </div>
                   ) : room.chat.map(m => {
                     const mine = m.userId === joinData?.userId;
+                    const isEditing = editingMsgId === m.id;
                     return (
-                      <div key={m.id} className={cn("flex items-end gap-2 animate-slide-up", mine ? "flex-row-reverse" : "")}>
-                        <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0", mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
-                          {m.name.charAt(0)}
-                        </div>
-                        <div className={cn(
-                          "max-w-[75%] px-3 py-2 rounded-2xl shadow-sm break-words",
-                          mine
-                            ? "bg-primary text-primary-foreground rounded-bl-md"
-                            : "bg-card border border-border rounded-br-md"
-                        )}>
-                          {!mine && <p className="text-[10px] font-semibold opacity-70 mb-0.5">{m.name}</p>}
-                          <p className="text-sm leading-relaxed">{m.text}</p>
+                      <div key={m.id} className={cn("flex w-full animate-slide-up", mine ? "justify-end" : "justify-start")}>
+                        <div className={cn("flex items-end gap-2 max-w-[85%]", mine ? "flex-row" : "flex-row-reverse")}>
+                          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0", mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
+                            {m.name.charAt(0)}
+                          </div>
+                          <div className="group/msg relative">
+                            <div className={cn(
+                              "px-3 py-2 rounded-2xl shadow-sm break-words",
+                              mine
+                                ? "bg-primary text-primary-foreground rounded-br-md"
+                                : "bg-card border border-border rounded-bl-md"
+                            )}>
+                              {!mine && <p className="text-[10px] font-semibold opacity-70 mb-0.5">{m.name}</p>}
+                              {m.deleted ? (
+                                <p className="text-sm italic opacity-60">پیام حذف شد</p>
+                              ) : isEditing ? (
+                                <div className="flex flex-col gap-1.5 min-w-[180px]">
+                                  <Input value={editingText} onChange={e => setEditingText(e.target.value)} className="h-7 text-sm bg-background text-foreground" autoFocus
+                                    onKeyDown={e => { if (e.key === 'Enter') { room.editChat(m.id, editingText.trim()); setEditingMsgId(null); } if (e.key === 'Escape') setEditingMsgId(null); }} />
+                                  <div className="flex gap-1.5">
+                                    <Button size="sm" className="h-6 px-2 text-[11px]" onClick={() => { room.editChat(m.id, editingText.trim()); setEditingMsgId(null); }}>ذخیره</Button>
+                                    <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => setEditingMsgId(null)}>لغو</Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.text}{m.editedAt && <span className="text-[10px] opacity-60 mr-1">(ویرایش)</span>}</p>
+                              )}
+                            </div>
+                            {/* Reactions */}
+                            {m.reactions && Object.keys(m.reactions).length > 0 && (
+                              <div className={cn("flex gap-1 mt-1", mine ? "justify-end" : "justify-start")}>
+                                {Object.entries(m.reactions).map(([emoji, users]) => (
+                                  <button key={emoji} onClick={() => room.reactChat(m.id, emoji)}
+                                    className={cn("text-xs px-1.5 py-0.5 rounded-full border transition-all animate-scale-in",
+                                      users.includes(joinData?.userId || '') ? "bg-primary/20 border-primary text-primary" : "bg-muted border-border")}>
+                                    {emoji} {users.length}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {/* Hover action bar */}
+                            {!m.deleted && !isEditing && (
+                              <div className={cn("absolute -top-3 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5 bg-card border border-border rounded-full shadow-md p-0.5 z-10",
+                                mine ? "left-0" : "right-0")}>
+                                <button onClick={() => setReactPickerFor(p => p === m.id ? null : m.id)} className="p-1 hover:bg-muted rounded-full" title="واکنش"><Smile className="w-3.5 h-3.5" /></button>
+                                {mine && <>
+                                  <button onClick={() => { setEditingMsgId(m.id); setEditingText(m.text); }} className="p-1 hover:bg-muted rounded-full" title="ویرایش"><Edit2 className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => { if (confirm('این پیام حذف شود؟')) room.deleteChat(m.id); }} className="p-1 hover:bg-destructive/15 text-destructive rounded-full" title="حذف"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </>}
+                              </div>
+                            )}
+                            {reactPickerFor === m.id && (
+                              <div className={cn("absolute -top-9 flex gap-0.5 bg-card border border-border rounded-full shadow-lg p-1 z-20 animate-scale-in",
+                                mine ? "left-0" : "right-0")}>
+                                {REACTIONS.map(em => (
+                                  <button key={em} onClick={() => { room.reactChat(m.id, em); setReactPickerFor(null); }} className="hover:scale-125 transition-transform text-base px-0.5">{em}</button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -381,7 +487,7 @@ const ClassRoom = () => {
             ) : (
               <div className="flex flex-col h-full min-h-0">
                 {isTeacher && (
-                  <div className="p-3 border-b border-border bg-muted/30">
+                  <div className="p-3 border-b border-border bg-muted/30 space-y-2">
                     <Button
                       onClick={startRollCall}
                       disabled={room.rollCallActive}
@@ -389,45 +495,38 @@ const ClassRoom = () => {
                       variant={room.rollCallActive ? "outline" : "default"}
                     >
                       <ClipboardCheck className="w-4 h-4" />
-                      {room.rollCallActive ? "در حال انتظار پاسخ..." : "حضور و غیاب"}
+                      {room.rollCallActive ? `در حال انتظار... (${rollCallSecondsLeft})` : "حضور و غیاب"}
                     </Button>
                     {room.rollCallActive && (
-                      <p className="text-[11px] text-muted-foreground mt-2 text-center animate-pulse">
+                      <p className="text-[11px] text-muted-foreground text-center animate-pulse">
                         پاسخ‌های دریافت‌شده: {Object.keys(room.rollCallResponses).length}
                       </p>
                     )}
+                    <p className="text-[11px] text-muted-foreground text-center">
+                      پس از پایان زمان، غایبین به‌صورت خودکار از کلاس خارج می‌شوند.
+                    </p>
                   </div>
                 )}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 scrollbar-hide">
-                  <ParticipantRow
-                    name={`${joinData?.displayName || 'شما'} (شما)`}
-                    isTeacher={!!isTeacher}
-                    micOn={room.micOn}
-                    handRaised={room.handRaised}
-                    self
-                  />
-                  {peerList.map(p => {
-                    const responded = !!room.rollCallResponses[p.userId];
-                    const mark = attendanceMarks[p.userId];
-                    return (
-                      <ParticipantRow
-                        key={p.userId}
-                        name={p.displayName}
-                        isTeacher={p.isTeacher}
-                        micOn={p.micOn}
-                        handRaised={p.handRaised}
-                        rollCallResponded={room.rollCallActive ? responded : undefined}
-                        attendance={mark}
-                        showTeacherControls={isTeacher && !p.isTeacher}
-                        drawAllowed={!!room.drawPerms[p.userId]}
-                        shareAllowed={!!room.sharePerms[p.userId]}
-                        onToggleDraw={() => room.setUserDrawPerm(p.userId, !room.drawPerms[p.userId])}
-                        onToggleShare={() => room.setUserSharePerm(p.userId, !room.sharePerms[p.userId])}
-                        onMarkHazer={() => markAttendance(p.userId, p.displayName, 'hazer')}
-                        onMarkGhayeb={() => markAttendance(p.userId, p.displayName, 'ghayeb')}
-                      />
-                    );
-                  })}
+                  {peopleEntries.map(p => (
+                    <ParticipantRow
+                      key={p.user_id}
+                      name={p.full_name}
+                      isTeacher={p.isTeacher}
+                      micOn={p.micOn}
+                      handRaised={p.handRaised}
+                      self={!!p.isMe}
+                      isOnline={p.isOnline}
+                      attendance={attendanceMarks[p.user_id]}
+                      showTeacherControls={isTeacher && !p.isMe && !p.isTeacher}
+                      drawAllowed={!!room.drawPerms[p.user_id]}
+                      shareAllowed={!!room.sharePerms[p.user_id]}
+                      onToggleDraw={() => room.setUserDrawPerm(p.user_id, !room.drawPerms[p.user_id])}
+                      onToggleShare={() => room.setUserSharePerm(p.user_id, !room.sharePerms[p.user_id])}
+                      onMarkHazer={() => markAttendance(p.user_id, p.full_name, 'hazer')}
+                      onMarkGhayeb={() => markAttendance(p.user_id, p.full_name, 'ghayeb')}
+                    />
+                  ))}
                 </div>
               </div>
             )}
@@ -435,13 +534,28 @@ const ClassRoom = () => {
         )}
       </div>
 
-      {/* Roll-call modal for students */}
+      {/* Roll-call modal for students — single Hazer button */}
       {!isTeacher && room.rollCallRequest && (
         <RollCallModal
           onPresent={() => { room.respondRollCall(); toast.success('حضور شما ثبت شد'); }}
-          onDismiss={room.dismissRollCallRequest}
         />
       )}
+
+      {/* Poll overlay */}
+      {room.currentPoll && (
+        <PollCard
+          poll={room.currentPoll}
+          votes={room.pollVotes}
+          myVote={room.myVote}
+          isTeacher={!!isTeacher}
+          totalParticipants={totalCount}
+          onVote={room.votePoll}
+          onEnd={room.endPoll}
+        />
+      )}
+
+      {/* Poll create dialog */}
+      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden) => { room.startPoll(q, opts, hidden); setPollOpen(false); }} />
 
       {/* Control bar */}
       <footer className="flex items-center justify-center gap-2 sm:gap-3 px-4 py-3 border-t border-border bg-card shrink-0 animate-slide-up">
@@ -449,8 +563,9 @@ const ClassRoom = () => {
         <ControlButton active={room.camOn} onClick={room.toggleCam} icon={room.camOn ? <VideoIcon className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />} label={room.camOn ? "دوربین" : "خاموش"} danger={!room.camOn} />
         <ControlButton active={room.sharing} onClick={handleShareClick} icon={room.sharing ? <MonitorX className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />} label={room.sharing ? "توقف اشتراک" : (room.canShare ? "اشتراک صفحه" : "اشتراک (نیاز اجازه)")} disabled={!room.canShare && !room.sharing} />
         <ControlButton active={mainView === 'whiteboard'} onClick={handleBoardClick} icon={<Pencil className="w-5 h-5" />} label="وایت‌برد" />
-        {!isTeacher && (
-          <ControlButton active={room.handRaised} onClick={room.toggleHand} icon={<Hand className="w-5 h-5" />} label={room.handRaised ? "پایین آوردن دست" : "بالا بردن دست"} />
+        <ControlButton active={room.handRaised} onClick={room.toggleHand} icon={<Hand className="w-5 h-5" />} label={room.handRaised ? "پایین آوردن دست" : "بالا بردن دست"} />
+        {isTeacher && (
+          <ControlButton active={!!room.currentPoll} onClick={() => setPollOpen(true)} icon={<BarChart3 className="w-5 h-5" />} label="نظرسنجی" disabled={!!room.currentPoll} />
         )}
         <ControlButton active={sidePanel === 'chat'} onClick={() => setSidePanel(p => p === 'chat' ? null : 'chat')} icon={<MessageSquare className="w-5 h-5" />} label="چت" />
         <div className="relative">
@@ -472,12 +587,12 @@ const ClassRoom = () => {
 };
 
 function ParticipantRow({
-  name, isTeacher, micOn, handRaised, self, rollCallResponded, attendance,
+  name, isTeacher, micOn, handRaised, self, isOnline = true, attendance,
   showTeacherControls, drawAllowed, shareAllowed,
   onToggleDraw, onToggleShare, onMarkHazer, onMarkGhayeb,
 }: {
   name: string; isTeacher: boolean; micOn: boolean; handRaised?: boolean; self?: boolean;
-  rollCallResponded?: boolean;
+  isOnline?: boolean;
   attendance?: 'hazer' | 'ghayeb';
   showTeacherControls?: boolean;
   drawAllowed?: boolean; shareAllowed?: boolean;
@@ -489,27 +604,27 @@ function ParticipantRow({
       "rounded-xl p-2.5 transition-all duration-300 animate-slide-up border",
       handRaised ? "bg-yellow-500/10 border-yellow-500/40"
       : self ? "bg-primary/10 border-primary/30"
+      : !isOnline ? "bg-muted/30 border-border/30 opacity-80"
       : "bg-card/50 border-border/40 hover:bg-card hover:border-border"
     )}>
       <div className="flex items-center gap-2">
         <div className={cn("w-9 h-9 rounded-full flex items-center justify-center font-bold shrink-0 relative",
-          self ? "bg-primary/30 text-primary" : "bg-muted text-foreground"
+          self ? "bg-primary/30 text-primary" : !isOnline ? "bg-muted text-muted-foreground" : "bg-muted text-foreground"
         )}>
           {name.charAt(0)}
           {handRaised && <span className="absolute -top-1 -right-1 text-sm">✋</span>}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate text-sm">{name}</p>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <p className={cn("font-medium truncate text-sm", !isOnline && "text-muted-foreground")}>{name}</p>
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground flex-wrap">
             {isTeacher && <span className="text-primary font-semibold">معلم</span>}
-            {rollCallResponded === true && <span className="text-primary flex items-center gap-0.5"><Check className="w-3 h-3" /> پاسخ داد</span>}
-            {rollCallResponded === false && <span className="text-yellow-600 dark:text-yellow-400">بدون پاسخ</span>}
-            {attendance === 'hazer' && <span className="px-1.5 rounded-full bg-primary/15 text-primary">حاضر</span>}
-            {attendance === 'ghayeb' && <span className="px-1.5 rounded-full bg-destructive/15 text-destructive">غایب</span>}
+            {attendance === 'hazer' && <span className="px-1.5 rounded-full bg-primary/15 text-primary font-semibold">حاضر</span>}
+            {attendance === 'ghayeb' && <span className="px-1.5 rounded-full bg-destructive/15 text-destructive font-semibold">غایب</span>}
+            {!isOnline && !attendance && <span className="text-muted-foreground">در کلاس نیست</span>}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {micOn ? <Mic className="w-4 h-4 text-muted-foreground" /> : <MicOff className="w-4 h-4 text-destructive" />}
+          {isOnline && (micOn ? <Mic className="w-4 h-4 text-muted-foreground" /> : <MicOff className="w-4 h-4 text-destructive" />)}
         </div>
       </div>
       {showTeacherControls && (
@@ -521,43 +636,160 @@ function ParticipantRow({
           <button onClick={onMarkGhayeb} className={cn(
             "flex-1 text-[11px] px-2 py-1 rounded-md font-medium transition-all flex items-center justify-center gap-1",
             attendance === 'ghayeb' ? "bg-destructive text-destructive-foreground" : "bg-muted hover:bg-destructive/20 hover:text-destructive"
-          )}><UserX className="w-3 h-3" /> غایب</button>
-          <div className="w-px h-5 bg-border" />
-          <button title="اجازه‌ی وایت‌برد" onClick={onToggleDraw} className={cn("p-1 rounded-md transition-all", drawAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button title="اجازه‌ی اشتراک صفحه" onClick={onToggleShare} className={cn("p-1 rounded-md transition-all", shareAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
-            <MonitorUp className="w-3.5 h-3.5" />
-          </button>
+          )}>غایب</button>
+          {isOnline && <>
+            <div className="w-px h-5 bg-border" />
+            <button title="اجازه‌ی وایت‌برد" onClick={onToggleDraw} className={cn("p-1 rounded-md transition-all", drawAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button title="اجازه‌ی اشتراک صفحه" onClick={onToggleShare} className={cn("p-1 rounded-md transition-all", shareAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
+              <MonitorUp className="w-3.5 h-3.5" />
+            </button>
+          </>}
         </div>
       )}
     </div>
   );
 }
 
-function RollCallModal({ onPresent, onDismiss }: { onPresent: () => void; onDismiss: () => void }) {
+function RollCallModal({ onPresent }: { onPresent: () => void }) {
   const [seconds, setSeconds] = useState(30);
+  const [responded, setResponded] = useState(false);
   useEffect(() => {
-    const i = setInterval(() => setSeconds(s => { if (s <= 1) { clearInterval(i); onDismiss(); return 0; } return s - 1; }), 1000);
+    const i = setInterval(() => setSeconds(s => Math.max(0, s - 1)), 1000);
     return () => clearInterval(i);
-  }, [onDismiss]);
+  }, []);
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/40 backdrop-blur-sm animate-fade-in" dir="rtl">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/50 backdrop-blur-sm animate-fade-in" dir="rtl">
       <div className="bg-card border-2 border-primary rounded-2xl p-8 shadow-2xl max-w-sm w-[90%] text-center animate-scale-in">
         <div className="w-16 h-16 rounded-full bg-primary/15 border border-primary/40 mx-auto flex items-center justify-center mb-4">
           <ClipboardCheck className="w-8 h-8 text-primary" />
         </div>
         <h2 className="text-xl font-bold mb-2">حضور و غیاب</h2>
         <p className="text-muted-foreground mb-1">معلم در حال بررسی حضور است</p>
-        <p className="text-sm text-muted-foreground mb-6">آیا حاضر هستید؟</p>
+        <p className="text-sm text-destructive mb-6">اگر تا پایان زمان حاضر را نزنید، غایب ثبت شده و از کلاس خارج می‌شوید.</p>
         <div className="w-full bg-muted rounded-full h-1.5 mb-5 overflow-hidden">
           <div className="h-full bg-primary transition-all duration-1000 ease-linear" style={{ width: `${(seconds / 30) * 100}%` }} />
         </div>
-        <Button onClick={onPresent} size="lg" className="w-full gap-2 text-base">
-          <Check className="w-5 h-5" /> حاضرم ({seconds})
+        <Button onClick={() => { setResponded(true); onPresent(); }} size="lg" className="w-full gap-2 text-base h-14" disabled={responded}>
+          <Check className="w-5 h-5" /> {responded ? 'ثبت شد ✓' : `حاضرم (${seconds})`}
         </Button>
       </div>
     </div>
+  );
+}
+
+function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, onEnd }: {
+  poll: { id: string; question: string; options: string[]; hidden: boolean };
+  votes: Record<string, number>;
+  myVote: number | null;
+  isTeacher: boolean;
+  totalParticipants: number;
+  onVote: (i: number) => void;
+  onEnd: () => void;
+}) {
+  const counts = useMemo(() => {
+    const c = new Array(poll.options.length).fill(0) as number[];
+    Object.values(votes).forEach(idx => { if (idx >= 0 && idx < c.length) c[idx]++; });
+    return c;
+  }, [votes, poll.options.length]);
+  const totalVotes = counts.reduce((a, b) => a + b, 0);
+  const showResults = isTeacher || !poll.hidden || myVote !== null;
+
+  return (
+    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[90] w-[90%] max-w-md animate-slide-up" dir="rtl">
+      <div className="bg-card border-2 border-primary rounded-2xl p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-primary" />
+            <h3 className="font-bold">نظرسنجی{poll.hidden && <span className="text-[11px] mr-1 text-muted-foreground">(نتایج مخفی)</span>}</h3>
+          </div>
+          {isTeacher && (
+            <button onClick={onEnd} className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-destructive/10"><X className="w-4 h-4" /></button>
+          )}
+        </div>
+        <p className="text-sm font-medium mb-3">{poll.question}</p>
+        <div className="space-y-2">
+          {poll.options.map((opt, i) => {
+            const pct = totalVotes > 0 ? Math.round((counts[i] / totalVotes) * 100) : 0;
+            const chosen = myVote === i;
+            return (
+              <button
+                key={i}
+                disabled={myVote !== null || isTeacher}
+                onClick={() => onVote(i)}
+                className={cn(
+                  "relative w-full text-right px-3 py-2.5 rounded-lg border transition-all overflow-hidden",
+                  chosen ? "border-primary bg-primary/10" : "border-border bg-muted/40 hover:bg-muted",
+                  (myVote !== null || isTeacher) && !chosen && "cursor-default"
+                )}
+              >
+                {showResults && (
+                  <div className="absolute inset-y-0 right-0 bg-primary/15 transition-all duration-500" style={{ width: `${pct}%` }} />
+                )}
+                <div className="relative flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{opt}</span>
+                  {showResults && <span className="text-xs font-mono text-muted-foreground">{counts[i]} ({pct}%)</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-3 text-center">
+          {totalVotes} رأی از {totalParticipants}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean) => void }) {
+  const [question, setQuestion] = useState("");
+  const [options, setOptions] = useState<string[]>(["", ""]);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); } }, [open]);
+  const submit = () => {
+    const q = question.trim();
+    const opts = options.map(o => o.trim()).filter(Boolean);
+    if (!q || opts.length < 2) { toast.error('سوال و حداقل ۲ گزینه لازم است'); return; }
+    onCreate(q, opts, hidden);
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md" dir="rtl">
+        <DialogHeader>
+          <DialogTitle>ایجاد نظرسنجی</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium mb-1 block">سوال</label>
+            <Textarea value={question} onChange={e => setQuestion(e.target.value)} placeholder="سوال نظرسنجی..." className="text-right min-h-[60px]" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium block">گزینه‌ها</label>
+            {options.map((o, i) => (
+              <div key={i} className="flex gap-2">
+                <Input value={o} onChange={e => setOptions(prev => prev.map((p, idx) => idx === i ? e.target.value : p))} placeholder={`گزینه ${i + 1}`} className="text-right" />
+                {options.length > 2 && (
+                  <Button size="icon" variant="outline" onClick={() => setOptions(prev => prev.filter((_, idx) => idx !== i))}><X className="w-4 h-4" /></Button>
+                )}
+              </div>
+            ))}
+            {options.length < 6 && (
+              <Button size="sm" variant="outline" onClick={() => setOptions(prev => [...prev, ""])} className="gap-1"><Plus className="w-3 h-3" /> افزودن گزینه</Button>
+            )}
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <Checkbox checked={hidden} onCheckedChange={v => setHidden(!!v)} />
+            <span>نتایج تا پایان رأی‌گیری از دانش‌آموزان مخفی باشد</span>
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>لغو</Button>
+          <Button onClick={submit}>شروع نظرسنجی</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
