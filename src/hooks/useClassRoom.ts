@@ -324,6 +324,50 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         const m = payload as ChatMsg & { from: string };
         setChat(prev => [...prev, { id: m.id, userId: m.userId, name: m.name, text: m.text, ts: m.ts }]);
       })
+      .on('broadcast', { event: 'chat-edit' }, ({ payload }) => {
+        const p = payload as { id: string; text: string; from: string };
+        setChat(prev => prev.map(m => m.id === p.id && m.userId === p.from ? { ...m, text: p.text, editedAt: Date.now() } : m));
+      })
+      .on('broadcast', { event: 'chat-delete' }, ({ payload }) => {
+        const p = payload as { id: string; from: string };
+        setChat(prev => prev.map(m => m.id === p.id && m.userId === p.from ? { ...m, deleted: true, text: '' } : m));
+      })
+      .on('broadcast', { event: 'chat-react' }, ({ payload }) => {
+        const p = payload as { id: string; emoji: string; from: string };
+        setChat(prev => prev.map(m => {
+          if (m.id !== p.id) return m;
+          const reactions = { ...(m.reactions || {}) };
+          const list = new Set(reactions[p.emoji] || []);
+          if (list.has(p.from)) list.delete(p.from); else list.add(p.from);
+          if (list.size === 0) delete reactions[p.emoji]; else reactions[p.emoji] = Array.from(list);
+          return { ...m, reactions };
+        }));
+      })
+      .on('broadcast', { event: 'kick' }, ({ payload }) => {
+        const p = payload as { from: string; userIds: string[] };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        if (p.userIds.includes(userId) && !isTeacherRef.current) {
+          setKicked(true);
+        }
+      })
+      .on('broadcast', { event: 'poll-start' }, ({ payload }) => {
+        const p = payload as Poll & { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setCurrentPoll({ id: p.id, question: p.question, options: p.options, hidden: p.hidden, by: p.by, ts: p.ts });
+        setPollVotes({});
+        setMyVote(null);
+      })
+      .on('broadcast', { event: 'poll-vote' }, ({ payload }) => {
+        const p = payload as { id: string; optionIdx: number; from: string };
+        setPollVotes(prev => ({ ...prev, [p.from]: p.optionIdx }));
+      })
+      .on('broadcast', { event: 'poll-end' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setCurrentPoll(null);
+        setPollVotes({});
+        setMyVote(null);
+      })
       .on('broadcast', { event: 'wb-stroke' }, ({ payload }) => {
         const s = payload as WhiteboardStroke & { from: string };
         if (s.from === userId) return;
