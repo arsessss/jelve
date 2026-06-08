@@ -576,6 +576,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, [renegotiate, send]);
 
   const sendChat = useCallback((text: string) => {
+    if (!isTeacherRef.current && chatLockedRef.current) return;
     const msg: ChatMsg = { id: crypto.randomUUID(), userId, name: displayName, text, ts: Date.now() };
     setChat(prev => [...prev, msg]);
     send('chat', { ...msg });
