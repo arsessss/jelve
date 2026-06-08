@@ -185,7 +185,14 @@ const ClassRoom = () => {
     room.sharing ? room.stopScreenShare() : room.startScreenShare();
   };
 
-  const handleBoardClick = () => setMainView(v => v === 'whiteboard' ? 'grid' : 'whiteboard');
+  const handleBoardClick = () => {
+    setMainView(v => {
+      const next = v === 'whiteboard' ? 'grid' : 'whiteboard';
+      // When teacher opens the board, force everyone else to open it too
+      if (isTeacher && next === 'whiteboard') room.openBoardForAll();
+      return next;
+    });
+  };
 
   // Start roll-call: load roster, broadcast, start timer; finalize at end
   const startRollCall = async () => {
