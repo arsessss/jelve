@@ -418,24 +418,38 @@ const ClassRoom = () => {
                   ? <><MessageSquare className="w-4 h-4 text-primary" /> چت کلاس</>
                   : <><Users className="w-4 h-4 text-primary" /> {isTeacher ? 'حضور و غیاب' : 'شرکت‌کنندگان'}</>}
               </h2>
-              <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                {sidePanel === 'chat' && isTeacher && (
+                  <>
+                    <button onClick={room.toggleChatLock} title={room.chatLocked ? "باز کردن چت" : "قفل چت"}
+                      className={cn("p-1.5 rounded-md transition-colors", room.chatLocked ? "bg-destructive/20 text-destructive" : "hover:bg-muted text-muted-foreground")}>
+                      {room.chatLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                    </button>
+                    <button onClick={() => { if (confirm('همه پیام‌ها پاک شود؟')) room.clearChat(); }} title="پاک کردن چت"
+                      className="p-1.5 rounded-md hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors">
+                      <Eraser className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+                <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             {sidePanel === 'chat' ? (
               <>
-                <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 scrollbar-hide">
+                <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 scrollbar-hide" dir="ltr">
                   {room.chat.length === 0 ? (
                     <div className="text-center py-10 animate-fade-in">
                       <MessageSquare className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
-                      <p className="text-sm text-muted-foreground">هنوز پیامی نیست</p>
+                      <p className="text-sm text-muted-foreground" dir="rtl">هنوز پیامی نیست</p>
                     </div>
                   ) : room.chat.map(m => {
                     const mine = m.userId === joinData?.userId;
                     const isEditing = editingMsgId === m.id;
                     return (
-                      <div key={m.id} className={cn("flex w-full animate-slide-up", mine ? "justify-end" : "justify-start")}>
-                        <div className={cn("flex items-end gap-2 max-w-[85%]", mine ? "flex-row" : "flex-row-reverse")}>
+                      <div key={m.id} dir="rtl" className={cn("flex w-full animate-slide-up", mine ? "justify-start" : "justify-end")}>
+                        <div className={cn("flex items-end gap-2 max-w-[85%]", mine ? "flex-row-reverse" : "flex-row")}>
                           <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0", mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
                             {m.name.charAt(0)}
                           </div>
@@ -443,8 +457,8 @@ const ClassRoom = () => {
                             <div className={cn(
                               "px-3 py-2 rounded-2xl shadow-sm break-words",
                               mine
-                                ? "bg-primary text-primary-foreground rounded-br-md"
-                                : "bg-card border border-border rounded-bl-md"
+                                ? "bg-primary text-primary-foreground rounded-bl-md"
+                                : "bg-card border border-border rounded-br-md"
                             )}>
                               {!mine && <p className="text-[10px] font-semibold opacity-70 mb-0.5">{m.name}</p>}
                               {m.deleted ? (
@@ -464,7 +478,7 @@ const ClassRoom = () => {
                             </div>
                             {/* Reactions */}
                             {m.reactions && Object.keys(m.reactions).length > 0 && (
-                              <div className={cn("flex gap-1 mt-1", mine ? "justify-end" : "justify-start")}>
+                              <div className={cn("flex gap-1 mt-1", mine ? "justify-start" : "justify-end")}>
                                 {Object.entries(m.reactions).map(([emoji, users]) => (
                                   <button key={emoji} onClick={() => room.reactChat(m.id, emoji)}
                                     className={cn("text-xs px-1.5 py-0.5 rounded-full border transition-all animate-scale-in",
@@ -477,7 +491,7 @@ const ClassRoom = () => {
                             {/* Hover action bar */}
                             {!m.deleted && !isEditing && (
                               <div className={cn("absolute -top-3 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5 bg-card border border-border rounded-full shadow-md p-0.5 z-10",
-                                mine ? "left-0" : "right-0")}>
+                                mine ? "right-0" : "left-0")}>
                                 <button onClick={() => setReactPickerFor(p => p === m.id ? null : m.id)} className="p-1 hover:bg-muted rounded-full" title="واکنش"><Smile className="w-3.5 h-3.5" /></button>
                                 {mine && <>
                                   <button onClick={() => { setEditingMsgId(m.id); setEditingText(m.text); }} className="p-1 hover:bg-muted rounded-full" title="ویرایش"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -487,7 +501,7 @@ const ClassRoom = () => {
                             )}
                             {reactPickerFor === m.id && (
                               <div className={cn("absolute -top-9 flex gap-0.5 bg-card border border-border rounded-full shadow-lg p-1 z-20 animate-scale-in",
-                                mine ? "left-0" : "right-0")}>
+                                mine ? "right-0" : "left-0")}>
                                 {REACTIONS.map(em => (
                                   <button key={em} onClick={() => { room.reactChat(m.id, em); setReactPickerFor(null); }} className="hover:scale-125 transition-transform text-base px-0.5">{em}</button>
                                 ))}
@@ -505,10 +519,11 @@ const ClassRoom = () => {
                     value={chatInput}
                     onChange={e => setChatInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSendChat()}
-                    placeholder="پیام خود را بنویسید..."
+                    placeholder={room.chatLocked && !isTeacher ? "چت توسط معلم قفل شده است" : "پیام خود را بنویسید..."}
+                    disabled={room.chatLocked && !isTeacher}
                     className="text-right rounded-full"
                   />
-                  <Button size="icon" onClick={handleSendChat} className="rounded-full shrink-0 transition-transform hover:scale-105"><Send className="w-4 h-4" /></Button>
+                  <Button size="icon" onClick={handleSendChat} disabled={room.chatLocked && !isTeacher} className="rounded-full shrink-0 transition-transform hover:scale-105"><Send className="w-4 h-4" /></Button>
                 </div>
               </>
             ) : (
