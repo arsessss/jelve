@@ -306,6 +306,10 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       .on('broadcast', { event: 'offer' }, async ({ payload }) => {
         const { from, to, sdp } = payload as { from: string; to: string; sdp: RTCSessionDescriptionInit };
         if (to !== userId) return;
+        if (!peerMetaRef.current[from]) {
+          // Will be filled by presence sync shortly; placeholder so setPeerState doesn't drop.
+          peerMetaRef.current[from] = { displayName: '...', isTeacher: false };
+        }
         const pc = createPeerConnection(from);
         try {
           await pc.setRemoteDescription(sdp);
