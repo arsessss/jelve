@@ -709,9 +709,42 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, []);
   const respondRollCall = useCallback(() => {
     setRollCallRequest(null);
+    // Also record self locally so teacher's own UI counts work even though broadcast is { self: false }
+    setRollCallResponses(prev => ({ ...prev, [userId]: Date.now() }));
     send('roll-call-response', {});
-  }, [send]);
+  }, [send, userId]);
   const dismissRollCallRequest = useCallback(() => setRollCallRequest(null), []);
+
+  // Returns the fresh responses snapshot (reads from ref, not stale closure)
+  const getRollCallResponses = useCallback(() => ({ ...rollCallResponsesRef.current }), []);
+
+  // Teacher class-wide controls
+  const forceMuteAll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    send('force-mute', {});
+  }, [send]);
+  const forceCamOffAll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    send('force-cam-off', {});
+  }, [send]);
+  const clearChat = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setChat([]);
+    send('chat-clear', {});
+  }, [send]);
+  const toggleChatLock = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setChatLocked(prev => {
+      const next = !prev;
+      send('chat-lock', { locked: next });
+      return next;
+    });
+  }, [send]);
+  const openBoardForAll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    send('wb-open', {});
+    setForceBoardOpen(n => n + 1);
+  }, [send]);
 
   const announceEnd = useCallback(() => {
     send('class-ended', {});
@@ -773,5 +806,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     startPoll,
     votePoll,
     endPoll,
+    chatLocked,
+    forceBoardOpen,
+    forceMuteAll,
+    forceCamOffAll,
+    clearChat,
+    toggleChatLock,
+    openBoardForAll,
+    getRollCallResponses,
   };
 }
