@@ -150,12 +150,15 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, [userId]);
 
   const setPeerState = useCallback((peerId: string, patch: Partial<RemotePeer>) => {
+    if (peerId === userId) return; // never create a peer for self
+    // Skip creating a placeholder entry before we know who this peer is via presence
+    if (!peerMetaRef.current[peerId]) return;
     setPeers(prev => {
       const meta = peerMetaRef.current[peerId] || { displayName: 'کاربر', isTeacher: false };
       const existing = prev[peerId] || { userId: peerId, displayName: meta.displayName, isTeacher: meta.isTeacher, cameraStream: null, screenStream: null, micOn: true, camOn: true, sharing: false };
       return { ...prev, [peerId]: { ...existing, ...patch } };
     });
-  }, []);
+  }, [userId]);
 
   // Recompute camera + screen streams from bucketed peer streams
   const recomputePeerStreams = useCallback((peerId: string) => {
