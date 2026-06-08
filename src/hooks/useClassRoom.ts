@@ -608,12 +608,23 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
 
   const startPoll = useCallback((question: string, options: string[], hidden: boolean) => {
     if (!isTeacherRef.current) return;
-    const p: Poll = { id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now() };
+    const startDuration = arguments[3] as unknown as number | undefined;
+    const duration = typeof startDuration === 'number' && startDuration > 0 ? Math.min(startDuration, 600) : 0;
+    const p: Poll = {
+      id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now(),
+      duration, endsAt: duration ? Date.now() + duration * 1000 : undefined,
+    };
     setCurrentPoll(p);
     setPollVotes({});
     setMyVote(null);
     send('poll-start', { ...p });
+    if (pollEndTimerRef.current) clearTimeout(pollEndTimerRef.current);
+    if (duration) {
+      pollEndTimerRef.current = setTimeout(() => { endPollRef.current?.(); }, duration * 1000 + 100);
+    }
   }, [userId, send]);
+  // forward ref for endPoll so startPoll can call it before it's declared
+  const endPollRef = useRef<(() => void) | null>(null);
 
   const votePoll = useCallback((optionIdx: number) => {
     if (!currentPoll || myVote !== null) return;
@@ -624,11 +635,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
 
   const endPoll = useCallback(() => {
     if (!isTeacherRef.current) return;
+    if (pollEndTimerRef.current) { clearTimeout(pollEndTimerRef.current); pollEndTimerRef.current = null; }
     setCurrentPoll(null);
     setPollVotes({});
     setMyVote(null);
     send('poll-end', {});
   }, [send]);
+  useEffect(() => { endPollRef.current = endPoll; }, [endPoll]);
 
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
     if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
