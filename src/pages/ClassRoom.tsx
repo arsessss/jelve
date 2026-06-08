@@ -598,6 +598,9 @@ const ClassRoom = () => {
           myVote={room.myVote}
           isTeacher={!!isTeacher}
           totalParticipants={totalCount}
+          peerList={peerList}
+          myName={joinData?.displayName || 'شما'}
+          myUserId={joinData?.userId || ''}
           onVote={room.votePoll}
           onEnd={room.endPoll}
         />
@@ -763,12 +766,15 @@ function RollCallModal({ onPresent }: { onPresent: () => void }) {
   );
 }
 
-function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, onEnd }: {
-  poll: { id: string; question: string; options: string[]; hidden: boolean };
+function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, peerList, myName, myUserId, onVote, onEnd }: {
+  poll: { id: string; question: string; options: string[]; hidden: boolean; endsAt?: number; duration?: number };
   votes: Record<string, number>;
   myVote: number | null;
   isTeacher: boolean;
   totalParticipants: number;
+  peerList: Array<{ userId: string; displayName: string }>;
+  myName: string;
+  myUserId: string;
   onVote: (i: number) => void;
   onEnd: () => void;
 }) {
@@ -779,6 +785,22 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
   }, [votes, poll.options.length]);
   const totalVotes = counts.reduce((a, b) => a + b, 0);
   const showResults = isTeacher || !poll.hidden || myVote !== null;
+  const showVoters = isTeacher || !poll.hidden;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!poll.endsAt) return;
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [poll.endsAt]);
+  const secondsLeft = poll.endsAt ? Math.max(0, Math.ceil((poll.endsAt - now) / 1000)) : null;
+  // Build voter name lookup (peerList + me)
+  const nameById: Record<string, string> = {};
+  nameById[myUserId] = myName;
+  peerList.forEach(p => { nameById[p.userId] = p.displayName; });
+  const votersByOption: string[][] = poll.options.map(() => []);
+  Object.entries(votes).forEach(([uid, idx]) => {
+    if (idx >= 0 && idx < votersByOption.length) votersByOption[idx].push(nameById[uid] || 'ناشناس');
+  });
 
   return (
     <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[90] w-[90%] max-w-md animate-slide-up" dir="rtl">
@@ -788,9 +810,16 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
             <BarChart3 className="w-5 h-5 text-primary" />
             <h3 className="font-bold">نظرسنجی{poll.hidden && <span className="text-[11px] mr-1 text-muted-foreground">(نتایج مخفی)</span>}</h3>
           </div>
-          {isTeacher && (
-            <button onClick={onEnd} className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-destructive/10"><X className="w-4 h-4" /></button>
-          )}
+          <div className="flex items-center gap-2">
+            {secondsLeft !== null && (
+              <span className={cn("text-xs font-mono px-2 py-0.5 rounded-full border",
+                secondsLeft <= 5 ? "bg-destructive/15 text-destructive border-destructive/40 animate-pulse" : "bg-muted text-muted-foreground border-border"
+              )}>{secondsLeft}s</span>
+            )}
+            {isTeacher && (
+              <button onClick={onEnd} className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-destructive/10"><X className="w-4 h-4" /></button>
+            )}
+          </div>
         </div>
         <p className="text-sm font-medium mb-3">{poll.question}</p>
         <div className="space-y-2">
@@ -798,24 +827,32 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
             const pct = totalVotes > 0 ? Math.round((counts[i] / totalVotes) * 100) : 0;
             const chosen = myVote === i;
             return (
-              <button
-                key={i}
-                disabled={myVote !== null || isTeacher}
-                onClick={() => onVote(i)}
-                className={cn(
-                  "relative w-full text-right px-3 py-2.5 rounded-lg border transition-all overflow-hidden",
-                  chosen ? "border-primary bg-primary/10" : "border-border bg-muted/40 hover:bg-muted",
-                  (myVote !== null || isTeacher) && !chosen && "cursor-default"
+              <div key={i} className="space-y-1">
+                <button
+                  disabled={myVote !== null || isTeacher}
+                  onClick={() => onVote(i)}
+                  className={cn(
+                    "relative w-full text-right px-3 py-2.5 rounded-lg border transition-all overflow-hidden",
+                    chosen ? "border-primary bg-primary/10" : "border-border bg-muted/40 hover:bg-muted",
+                    (myVote !== null || isTeacher) && !chosen && "cursor-default"
+                  )}
+                >
+                  {showResults && (
+                    <div className="absolute inset-y-0 right-0 bg-primary/15 transition-all duration-500" style={{ width: `${pct}%` }} />
+                  )}
+                  <div className="relative flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{opt}</span>
+                    {showResults && <span className="text-xs font-mono text-muted-foreground">{counts[i]} ({pct}%)</span>}
+                  </div>
+                </button>
+                {showVoters && votersByOption[i].length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-2">
+                    {votersByOption[i].map((n, k) => (
+                      <span key={k} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60">{n}</span>
+                    ))}
+                  </div>
                 )}
-              >
-                {showResults && (
-                  <div className="absolute inset-y-0 right-0 bg-primary/15 transition-all duration-500" style={{ width: `${pct}%` }} />
-                )}
-                <div className="relative flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{opt}</span>
-                  {showResults && <span className="text-xs font-mono text-muted-foreground">{counts[i]} ({pct}%)</span>}
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
