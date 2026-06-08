@@ -98,6 +98,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const isTeacherRef = useRef(isTeacher);
   const rollCallResponsesRef = useRef<Record<string, number>>({});
   const pollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatLockedRef = useRef(false);
   // Senders we added for screen (per peer): video + optional audio
   const screenSendersRef = useRef<Record<string, RTCRtpSender[]>>({});
   // Track which incoming stream.id is the screen stream, per peer
@@ -109,6 +110,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   useEffect(() => { drawPermsRef.current = drawPerms; }, [drawPerms]);
   useEffect(() => { sharePermsRef.current = sharePerms; }, [sharePerms]);
   useEffect(() => { rollCallResponsesRef.current = rollCallResponses; }, [rollCallResponses]);
+  useEffect(() => { chatLockedRef.current = chatLocked; }, [chatLocked]);
 
   // Initialize media. Students default with camera OFF (mesh-friendly for larger classes).
   useEffect(() => {
