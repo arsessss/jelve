@@ -15,7 +15,8 @@ import { Whiteboard } from "@/components/classroom/Whiteboard";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
   MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand,
-  ClipboardCheck, Check, BarChart3, Smile, Trash2, Edit2, MoreHorizontal, Plus
+  ClipboardCheck, Check, BarChart3, Smile, Trash2, Edit2, MoreHorizontal, Plus,
+  Settings, Lock, Unlock, MicOff as MicOffIcon, VideoOff as VideoOffIcon, Eraser, Sun, Moon
 } from "lucide-react";
 
 type SidePanel = 'chat' | 'people' | null;
@@ -54,6 +55,14 @@ const ClassRoom = () => {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [rollCallSecondsLeft, setRollCallSecondsLeft] = useState(0);
   const [pollOpen, setPollOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fontSize, setFontSize] = useState<number>(() => {
+    const v = Number(localStorage.getItem('class-font-size') || '16');
+    return Number.isFinite(v) && v >= 12 && v <= 22 ? v : 16;
+  });
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() =>
+    (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
+  );
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -102,6 +111,20 @@ const ClassRoom = () => {
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [room.chat]);
+
+  // Force board open broadcast → flip to whiteboard view
+  useEffect(() => {
+    if (room.forceBoardOpen > 0) setMainView('whiteboard');
+  }, [room.forceBoardOpen]);
+
+  // Apply font size + theme
+  useEffect(() => {
+    localStorage.setItem('class-font-size', String(fontSize));
+    document.documentElement.style.setProperty('--class-font-scale', String(fontSize / 16));
+  }, [fontSize]);
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', themeMode === 'dark');
+  }, [themeMode]);
 
   // Load roster + saved attendance when teacher opens panel
   useEffect(() => {
