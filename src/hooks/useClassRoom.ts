@@ -606,10 +606,9 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('kick', { userIds });
   }, [send]);
 
-  const startPoll = useCallback((question: string, options: string[], hidden: boolean) => {
+  const startPoll = useCallback((question: string, options: string[], hidden: boolean, durationSec?: number) => {
     if (!isTeacherRef.current) return;
-    const startDuration = arguments[3] as unknown as number | undefined;
-    const duration = typeof startDuration === 'number' && startDuration > 0 ? Math.min(startDuration, 600) : 0;
+    const duration = typeof durationSec === 'number' && durationSec > 0 ? Math.min(durationSec, 600) : 0;
     const p: Poll = {
       id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now(),
       duration, endsAt: duration ? Date.now() + duration * 1000 : undefined,
