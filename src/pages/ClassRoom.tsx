@@ -203,13 +203,17 @@ const ClassRoom = () => {
   const finalizeRollCall = async (rosterList: RosterEntry[]) => {
     if (!classId) return;
     room.stopRollCall();
-    const responses = room.rollCallResponses;
+    // CRITICAL: read fresh responses from the hook's ref (not stale closure)
+    const responses = room.getRollCallResponses();
     const newMarks: Record<string, 'hazer' | 'ghayeb'> = { ...attendanceMarks };
     const ghayebIds: string[] = [];
+    const myId = joinData?.userId;
     for (const r of rosterList) {
-      const status: 'hazer' | 'ghayeb' = responses[r.user_id] ? 'hazer' : 'ghayeb';
+      // Teacher (self) is always treated as present, never kicked.
+      const isMe = myId === r.user_id;
+      const status: 'hazer' | 'ghayeb' = (isMe || responses[r.user_id]) ? 'hazer' : 'ghayeb';
       newMarks[r.user_id] = status;
-      if (status === 'ghayeb') ghayebIds.push(r.user_id);
+      if (status === 'ghayeb' && !isMe) ghayebIds.push(r.user_id);
       onlineClassApi.attendanceMark(classId, r.user_id, r.full_name, status);
     }
     setAttendanceMarks(newMarks);
