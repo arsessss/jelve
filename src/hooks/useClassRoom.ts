@@ -42,6 +42,8 @@ export interface Poll {
   hidden: boolean;
   by: string;
   ts: number;
+  duration?: number; // seconds; 0/undefined = no timer
+  endsAt?: number;   // epoch ms
 }
 
 interface UseClassRoomOpts {
@@ -81,6 +83,9 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const [myVote, setMyVote] = useState<number | null>(null);
   // Kicked
   const [kicked, setKicked] = useState(false);
+  // Teacher-driven class-wide controls
+  const [chatLocked, setChatLocked] = useState(false);
+  const [forceBoardOpen, setForceBoardOpen] = useState(0); // increments to signal "open board for all"
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
@@ -91,6 +96,8 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const drawPermsRef = useRef<Record<string, boolean>>({});
   const sharePermsRef = useRef<Record<string, boolean>>({});
   const isTeacherRef = useRef(isTeacher);
+  const rollCallResponsesRef = useRef<Record<string, number>>({});
+  const pollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Senders we added for screen (per peer): video + optional audio
   const screenSendersRef = useRef<Record<string, RTCRtpSender[]>>({});
   // Track which incoming stream.id is the screen stream, per peer
@@ -101,6 +108,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { drawPermsRef.current = drawPerms; }, [drawPerms]);
   useEffect(() => { sharePermsRef.current = sharePerms; }, [sharePerms]);
+  useEffect(() => { rollCallResponsesRef.current = rollCallResponses; }, [rollCallResponses]);
 
   // Initialize media. Students default with camera OFF (mesh-friendly for larger classes).
   useEffect(() => {
@@ -194,6 +202,8 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       }
     };
     pc.ontrack = (e) => {
+      // Ignore self (shouldn't happen but defensive)
+      if (peerId === userId) return;
       const incomingStream = e.streams[0] || new MediaStream([e.track]);
       const sid = incomingStream.id;
       const buckets = peerStreamsByIdRef.current[peerId] || (peerStreamsByIdRef.current[peerId] = {});
