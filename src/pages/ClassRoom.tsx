@@ -15,7 +15,8 @@ import { Whiteboard } from "@/components/classroom/Whiteboard";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
   MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand,
-  ClipboardCheck, Check, BarChart3, Smile, Trash2, Edit2, MoreHorizontal, Plus
+  ClipboardCheck, Check, BarChart3, Smile, Trash2, Edit2, MoreHorizontal, Plus,
+  Settings, Lock, Unlock, MicOff as MicOffIcon, VideoOff as VideoOffIcon, Eraser, Sun, Moon
 } from "lucide-react";
 
 type SidePanel = 'chat' | 'people' | null;
@@ -54,6 +55,14 @@ const ClassRoom = () => {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [rollCallSecondsLeft, setRollCallSecondsLeft] = useState(0);
   const [pollOpen, setPollOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fontSize, setFontSize] = useState<number>(() => {
+    const v = Number(localStorage.getItem('class-font-size') || '16');
+    return Number.isFinite(v) && v >= 12 && v <= 22 ? v : 16;
+  });
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() =>
+    (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
+  );
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -102,6 +111,20 @@ const ClassRoom = () => {
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [room.chat]);
+
+  // Force board open broadcast → flip to whiteboard view
+  useEffect(() => {
+    if (room.forceBoardOpen > 0) setMainView('whiteboard');
+  }, [room.forceBoardOpen]);
+
+  // Apply font size + theme
+  useEffect(() => {
+    localStorage.setItem('class-font-size', String(fontSize));
+    document.documentElement.style.setProperty('--class-font-scale', String(fontSize / 16));
+  }, [fontSize]);
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', themeMode === 'dark');
+  }, [themeMode]);
 
   // Load roster + saved attendance when teacher opens panel
   useEffect(() => {
@@ -162,7 +185,14 @@ const ClassRoom = () => {
     room.sharing ? room.stopScreenShare() : room.startScreenShare();
   };
 
-  const handleBoardClick = () => setMainView(v => v === 'whiteboard' ? 'grid' : 'whiteboard');
+  const handleBoardClick = () => {
+    setMainView(v => {
+      const next = v === 'whiteboard' ? 'grid' : 'whiteboard';
+      // When teacher opens the board, force everyone else to open it too
+      if (isTeacher && next === 'whiteboard') room.openBoardForAll();
+      return next;
+    });
+  };
 
   // Start roll-call: load roster, broadcast, start timer; finalize at end
   const startRollCall = async () => {
@@ -180,13 +210,17 @@ const ClassRoom = () => {
   const finalizeRollCall = async (rosterList: RosterEntry[]) => {
     if (!classId) return;
     room.stopRollCall();
-    const responses = room.rollCallResponses;
+    // CRITICAL: read fresh responses from the hook's ref (not stale closure)
+    const responses = room.getRollCallResponses();
     const newMarks: Record<string, 'hazer' | 'ghayeb'> = { ...attendanceMarks };
     const ghayebIds: string[] = [];
+    const myId = joinData?.userId;
     for (const r of rosterList) {
-      const status: 'hazer' | 'ghayeb' = responses[r.user_id] ? 'hazer' : 'ghayeb';
+      // Teacher (self) is always treated as present, never kicked.
+      const isMe = myId === r.user_id;
+      const status: 'hazer' | 'ghayeb' = (isMe || responses[r.user_id]) ? 'hazer' : 'ghayeb';
       newMarks[r.user_id] = status;
-      if (status === 'ghayeb') ghayebIds.push(r.user_id);
+      if (status === 'ghayeb' && !isMe) ghayebIds.push(r.user_id);
       onlineClassApi.attendanceMark(classId, r.user_id, r.full_name, status);
     }
     setAttendanceMarks(newMarks);
@@ -391,24 +425,38 @@ const ClassRoom = () => {
                   ? <><MessageSquare className="w-4 h-4 text-primary" /> چت کلاس</>
                   : <><Users className="w-4 h-4 text-primary" /> {isTeacher ? 'حضور و غیاب' : 'شرکت‌کنندگان'}</>}
               </h2>
-              <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                {sidePanel === 'chat' && isTeacher && (
+                  <>
+                    <button onClick={room.toggleChatLock} title={room.chatLocked ? "باز کردن چت" : "قفل چت"}
+                      className={cn("p-1.5 rounded-md transition-colors", room.chatLocked ? "bg-destructive/20 text-destructive" : "hover:bg-muted text-muted-foreground")}>
+                      {room.chatLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                    </button>
+                    <button onClick={() => { if (confirm('همه پیام‌ها پاک شود؟')) room.clearChat(); }} title="پاک کردن چت"
+                      className="p-1.5 rounded-md hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors">
+                      <Eraser className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+                <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             {sidePanel === 'chat' ? (
               <>
-                <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 scrollbar-hide">
+                <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 scrollbar-hide" dir="ltr">
                   {room.chat.length === 0 ? (
                     <div className="text-center py-10 animate-fade-in">
                       <MessageSquare className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
-                      <p className="text-sm text-muted-foreground">هنوز پیامی نیست</p>
+                      <p className="text-sm text-muted-foreground" dir="rtl">هنوز پیامی نیست</p>
                     </div>
                   ) : room.chat.map(m => {
                     const mine = m.userId === joinData?.userId;
                     const isEditing = editingMsgId === m.id;
                     return (
-                      <div key={m.id} className={cn("flex w-full animate-slide-up", mine ? "justify-end" : "justify-start")}>
-                        <div className={cn("flex items-end gap-2 max-w-[85%]", mine ? "flex-row" : "flex-row-reverse")}>
+                      <div key={m.id} dir="rtl" className={cn("flex w-full animate-slide-up", mine ? "justify-start" : "justify-end")}>
+                        <div className={cn("flex items-end gap-2 max-w-[85%]", mine ? "flex-row-reverse" : "flex-row")}>
                           <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0", mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
                             {m.name.charAt(0)}
                           </div>
@@ -416,8 +464,8 @@ const ClassRoom = () => {
                             <div className={cn(
                               "px-3 py-2 rounded-2xl shadow-sm break-words",
                               mine
-                                ? "bg-primary text-primary-foreground rounded-br-md"
-                                : "bg-card border border-border rounded-bl-md"
+                                ? "bg-primary text-primary-foreground rounded-bl-md"
+                                : "bg-card border border-border rounded-br-md"
                             )}>
                               {!mine && <p className="text-[10px] font-semibold opacity-70 mb-0.5">{m.name}</p>}
                               {m.deleted ? (
@@ -437,7 +485,7 @@ const ClassRoom = () => {
                             </div>
                             {/* Reactions */}
                             {m.reactions && Object.keys(m.reactions).length > 0 && (
-                              <div className={cn("flex gap-1 mt-1", mine ? "justify-end" : "justify-start")}>
+                              <div className={cn("flex gap-1 mt-1", mine ? "justify-start" : "justify-end")}>
                                 {Object.entries(m.reactions).map(([emoji, users]) => (
                                   <button key={emoji} onClick={() => room.reactChat(m.id, emoji)}
                                     className={cn("text-xs px-1.5 py-0.5 rounded-full border transition-all animate-scale-in",
@@ -450,7 +498,7 @@ const ClassRoom = () => {
                             {/* Hover action bar */}
                             {!m.deleted && !isEditing && (
                               <div className={cn("absolute -top-3 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5 bg-card border border-border rounded-full shadow-md p-0.5 z-10",
-                                mine ? "left-0" : "right-0")}>
+                                mine ? "right-0" : "left-0")}>
                                 <button onClick={() => setReactPickerFor(p => p === m.id ? null : m.id)} className="p-1 hover:bg-muted rounded-full" title="واکنش"><Smile className="w-3.5 h-3.5" /></button>
                                 {mine && <>
                                   <button onClick={() => { setEditingMsgId(m.id); setEditingText(m.text); }} className="p-1 hover:bg-muted rounded-full" title="ویرایش"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -460,7 +508,7 @@ const ClassRoom = () => {
                             )}
                             {reactPickerFor === m.id && (
                               <div className={cn("absolute -top-9 flex gap-0.5 bg-card border border-border rounded-full shadow-lg p-1 z-20 animate-scale-in",
-                                mine ? "left-0" : "right-0")}>
+                                mine ? "right-0" : "left-0")}>
                                 {REACTIONS.map(em => (
                                   <button key={em} onClick={() => { room.reactChat(m.id, em); setReactPickerFor(null); }} className="hover:scale-125 transition-transform text-base px-0.5">{em}</button>
                                 ))}
@@ -478,10 +526,11 @@ const ClassRoom = () => {
                     value={chatInput}
                     onChange={e => setChatInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSendChat()}
-                    placeholder="پیام خود را بنویسید..."
+                    placeholder={room.chatLocked && !isTeacher ? "چت توسط معلم قفل شده است" : "پیام خود را بنویسید..."}
+                    disabled={room.chatLocked && !isTeacher}
                     className="text-right rounded-full"
                   />
-                  <Button size="icon" onClick={handleSendChat} className="rounded-full shrink-0 transition-transform hover:scale-105"><Send className="w-4 h-4" /></Button>
+                  <Button size="icon" onClick={handleSendChat} disabled={room.chatLocked && !isTeacher} className="rounded-full shrink-0 transition-transform hover:scale-105"><Send className="w-4 h-4" /></Button>
                 </div>
               </>
             ) : (
@@ -549,13 +598,43 @@ const ClassRoom = () => {
           myVote={room.myVote}
           isTeacher={!!isTeacher}
           totalParticipants={totalCount}
+          peerList={peerList}
+          myName={joinData?.displayName || 'شما'}
+          myUserId={joinData?.userId || ''}
           onVote={room.votePoll}
           onEnd={room.endPoll}
         />
       )}
 
       {/* Poll create dialog */}
-      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden) => { room.startPoll(q, opts, hidden); setPollOpen(false); }} />
+      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden, duration) => { room.startPoll(q, opts, hidden, duration); setPollOpen(false); }} />
+
+      {/* Settings dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader><DialogTitle>تنظیمات کلاس</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium mb-2 block">حالت نمایش</label>
+              <div className="flex gap-2">
+                <Button variant={themeMode === 'light' ? 'default' : 'outline'} className="flex-1 gap-2" onClick={() => setThemeMode('light')}><Sun className="w-4 h-4" /> روشن</Button>
+                <Button variant={themeMode === 'dark' ? 'default' : 'outline'} className="flex-1 gap-2" onClick={() => setThemeMode('dark')}><Moon className="w-4 h-4" /> تیره</Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-2 block">اندازه‌ی متن: {fontSize}px</label>
+              <input type="range" min={12} max={22} step={1} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full accent-primary" />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-2 block">زبان</label>
+              <p className="text-xs text-muted-foreground">فعلاً فقط فارسی پشتیبانی می‌شود.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSettingsOpen(false)}>بستن</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Control bar */}
       <footer className="flex items-center justify-center gap-2 sm:gap-3 px-4 py-3 border-t border-border bg-card shrink-0 animate-slide-up">
@@ -576,6 +655,14 @@ const ClassRoom = () => {
             </span>
           )}
         </div>
+        <ControlButton active={false} onClick={() => setSettingsOpen(true)} icon={<Settings className="w-5 h-5" />} label="تنظیمات" />
+        {isTeacher && (
+          <>
+            <div className="w-px h-8 bg-border mx-1" />
+            <ControlButton active={false} onClick={() => { if (confirm('میکروفون همه دانش‌آموزان خاموش شود؟')) room.forceMuteAll(); }} icon={<MicOffIcon className="w-5 h-5" />} label="بی‌صدا کردن همه" danger />
+            <ControlButton active={false} onClick={() => { if (confirm('دوربین همه دانش‌آموزان خاموش شود؟')) room.forceCamOffAll(); }} icon={<VideoOffIcon className="w-5 h-5" />} label="خاموش کردن دوربین همه" danger />
+          </>
+        )}
         <div className="w-px h-8 bg-border mx-1" />
         {isTeacher && (
           <Button variant="outline" onClick={handleEndClass} className="gap-2"><Power className="w-4 h-4" /> پایان کلاس</Button>
@@ -679,12 +766,15 @@ function RollCallModal({ onPresent }: { onPresent: () => void }) {
   );
 }
 
-function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, onEnd }: {
-  poll: { id: string; question: string; options: string[]; hidden: boolean };
+function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, peerList, myName, myUserId, onVote, onEnd }: {
+  poll: { id: string; question: string; options: string[]; hidden: boolean; endsAt?: number; duration?: number };
   votes: Record<string, number>;
   myVote: number | null;
   isTeacher: boolean;
   totalParticipants: number;
+  peerList: Array<{ userId: string; displayName: string }>;
+  myName: string;
+  myUserId: string;
   onVote: (i: number) => void;
   onEnd: () => void;
 }) {
@@ -695,6 +785,22 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
   }, [votes, poll.options.length]);
   const totalVotes = counts.reduce((a, b) => a + b, 0);
   const showResults = isTeacher || !poll.hidden || myVote !== null;
+  const showVoters = isTeacher || !poll.hidden;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!poll.endsAt) return;
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [poll.endsAt]);
+  const secondsLeft = poll.endsAt ? Math.max(0, Math.ceil((poll.endsAt - now) / 1000)) : null;
+  // Build voter name lookup (peerList + me)
+  const nameById: Record<string, string> = {};
+  nameById[myUserId] = myName;
+  peerList.forEach(p => { nameById[p.userId] = p.displayName; });
+  const votersByOption: string[][] = poll.options.map(() => []);
+  Object.entries(votes).forEach(([uid, idx]) => {
+    if (idx >= 0 && idx < votersByOption.length) votersByOption[idx].push(nameById[uid] || 'ناشناس');
+  });
 
   return (
     <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[90] w-[90%] max-w-md animate-slide-up" dir="rtl">
@@ -704,9 +810,16 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
             <BarChart3 className="w-5 h-5 text-primary" />
             <h3 className="font-bold">نظرسنجی{poll.hidden && <span className="text-[11px] mr-1 text-muted-foreground">(نتایج مخفی)</span>}</h3>
           </div>
-          {isTeacher && (
-            <button onClick={onEnd} className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-destructive/10"><X className="w-4 h-4" /></button>
-          )}
+          <div className="flex items-center gap-2">
+            {secondsLeft !== null && (
+              <span className={cn("text-xs font-mono px-2 py-0.5 rounded-full border",
+                secondsLeft <= 5 ? "bg-destructive/15 text-destructive border-destructive/40 animate-pulse" : "bg-muted text-muted-foreground border-border"
+              )}>{secondsLeft}s</span>
+            )}
+            {isTeacher && (
+              <button onClick={onEnd} className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-destructive/10"><X className="w-4 h-4" /></button>
+            )}
+          </div>
         </div>
         <p className="text-sm font-medium mb-3">{poll.question}</p>
         <div className="space-y-2">
@@ -714,24 +827,32 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
             const pct = totalVotes > 0 ? Math.round((counts[i] / totalVotes) * 100) : 0;
             const chosen = myVote === i;
             return (
-              <button
-                key={i}
-                disabled={myVote !== null || isTeacher}
-                onClick={() => onVote(i)}
-                className={cn(
-                  "relative w-full text-right px-3 py-2.5 rounded-lg border transition-all overflow-hidden",
-                  chosen ? "border-primary bg-primary/10" : "border-border bg-muted/40 hover:bg-muted",
-                  (myVote !== null || isTeacher) && !chosen && "cursor-default"
+              <div key={i} className="space-y-1">
+                <button
+                  disabled={myVote !== null || isTeacher}
+                  onClick={() => onVote(i)}
+                  className={cn(
+                    "relative w-full text-right px-3 py-2.5 rounded-lg border transition-all overflow-hidden",
+                    chosen ? "border-primary bg-primary/10" : "border-border bg-muted/40 hover:bg-muted",
+                    (myVote !== null || isTeacher) && !chosen && "cursor-default"
+                  )}
+                >
+                  {showResults && (
+                    <div className="absolute inset-y-0 right-0 bg-primary/15 transition-all duration-500" style={{ width: `${pct}%` }} />
+                  )}
+                  <div className="relative flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{opt}</span>
+                    {showResults && <span className="text-xs font-mono text-muted-foreground">{counts[i]} ({pct}%)</span>}
+                  </div>
+                </button>
+                {showVoters && votersByOption[i].length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-2">
+                    {votersByOption[i].map((n, k) => (
+                      <span key={k} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60">{n}</span>
+                    ))}
+                  </div>
                 )}
-              >
-                {showResults && (
-                  <div className="absolute inset-y-0 right-0 bg-primary/15 transition-all duration-500" style={{ width: `${pct}%` }} />
-                )}
-                <div className="relative flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{opt}</span>
-                  {showResults && <span className="text-xs font-mono text-muted-foreground">{counts[i]} ({pct}%)</span>}
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -743,16 +864,17 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
   );
 }
 
-function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean) => void }) {
+function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number) => void }) {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [hidden, setHidden] = useState(false);
-  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); } }, [open]);
+  const [duration, setDuration] = useState<number>(60);
+  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); setDuration(60); } }, [open]);
   const submit = () => {
     const q = question.trim();
     const opts = options.map(o => o.trim()).filter(Boolean);
     if (!q || opts.length < 2) { toast.error('سوال و حداقل ۲ گزینه لازم است'); return; }
-    onCreate(q, opts, hidden);
+    onCreate(q, opts, hidden, duration);
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -783,6 +905,10 @@ function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onO
             <Checkbox checked={hidden} onCheckedChange={v => setHidden(!!v)} />
             <span>نتایج تا پایان رأی‌گیری از دانش‌آموزان مخفی باشد</span>
           </label>
+          <div>
+            <label className="text-xs font-medium mb-1 block">زمان (ثانیه) — 0 = بدون زمان</label>
+            <Input type="number" min={0} max={600} value={duration} onChange={e => setDuration(Math.max(0, Math.min(600, Number(e.target.value) || 0)))} className="text-right" />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>لغو</Button>

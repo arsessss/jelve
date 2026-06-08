@@ -42,6 +42,8 @@ export interface Poll {
   hidden: boolean;
   by: string;
   ts: number;
+  duration?: number; // seconds; 0/undefined = no timer
+  endsAt?: number;   // epoch ms
 }
 
 interface UseClassRoomOpts {
@@ -81,6 +83,9 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const [myVote, setMyVote] = useState<number | null>(null);
   // Kicked
   const [kicked, setKicked] = useState(false);
+  // Teacher-driven class-wide controls
+  const [chatLocked, setChatLocked] = useState(false);
+  const [forceBoardOpen, setForceBoardOpen] = useState(0); // increments to signal "open board for all"
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
@@ -91,6 +96,9 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const drawPermsRef = useRef<Record<string, boolean>>({});
   const sharePermsRef = useRef<Record<string, boolean>>({});
   const isTeacherRef = useRef(isTeacher);
+  const rollCallResponsesRef = useRef<Record<string, number>>({});
+  const pollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatLockedRef = useRef(false);
   // Senders we added for screen (per peer): video + optional audio
   const screenSendersRef = useRef<Record<string, RTCRtpSender[]>>({});
   // Track which incoming stream.id is the screen stream, per peer
@@ -101,6 +109,8 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { drawPermsRef.current = drawPerms; }, [drawPerms]);
   useEffect(() => { sharePermsRef.current = sharePerms; }, [sharePerms]);
+  useEffect(() => { rollCallResponsesRef.current = rollCallResponses; }, [rollCallResponses]);
+  useEffect(() => { chatLockedRef.current = chatLocked; }, [chatLocked]);
 
   // Initialize media. Students default with camera OFF (mesh-friendly for larger classes).
   useEffect(() => {
@@ -140,12 +150,15 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, [userId]);
 
   const setPeerState = useCallback((peerId: string, patch: Partial<RemotePeer>) => {
+    if (peerId === userId) return; // never create a peer for self
+    // Skip creating a placeholder entry before we know who this peer is via presence
+    if (!peerMetaRef.current[peerId]) return;
     setPeers(prev => {
       const meta = peerMetaRef.current[peerId] || { displayName: 'کاربر', isTeacher: false };
       const existing = prev[peerId] || { userId: peerId, displayName: meta.displayName, isTeacher: meta.isTeacher, cameraStream: null, screenStream: null, micOn: true, camOn: true, sharing: false };
       return { ...prev, [peerId]: { ...existing, ...patch } };
     });
-  }, []);
+  }, [userId]);
 
   // Recompute camera + screen streams from bucketed peer streams
   const recomputePeerStreams = useCallback((peerId: string) => {
@@ -194,6 +207,8 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       }
     };
     pc.ontrack = (e) => {
+      // Ignore self (shouldn't happen but defensive)
+      if (peerId === userId) return;
       const incomingStream = e.streams[0] || new MediaStream([e.track]);
       const sid = incomingStream.id;
       const buckets = peerStreamsByIdRef.current[peerId] || (peerStreamsByIdRef.current[peerId] = {});
@@ -291,6 +306,10 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       .on('broadcast', { event: 'offer' }, async ({ payload }) => {
         const { from, to, sdp } = payload as { from: string; to: string; sdp: RTCSessionDescriptionInit };
         if (to !== userId) return;
+        if (!peerMetaRef.current[from]) {
+          // Will be filled by presence sync shortly; placeholder so setPeerState doesn't drop.
+          peerMetaRef.current[from] = { displayName: '...', isTeacher: false };
+        }
         const pc = createPeerConnection(from);
         try {
           await pc.setRemoteDescription(sdp);
@@ -425,6 +444,37 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         const p = payload as { from: string };
         setRollCallResponses(prev => ({ ...prev, [p.from]: Date.now() }));
       })
+      .on('broadcast', { event: 'force-mute' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        if (isTeacherRef.current) return;
+        const stream = localStreamRef.current;
+        if (stream) stream.getAudioTracks().forEach(t => { t.enabled = false; });
+        setMicOn(false);
+      })
+      .on('broadcast', { event: 'force-cam-off' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        if (isTeacherRef.current) return;
+        const stream = localStreamRef.current;
+        if (stream) stream.getVideoTracks().forEach(t => { t.enabled = false; });
+        setCamOn(false);
+      })
+      .on('broadcast', { event: 'chat-clear' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setChat([]);
+      })
+      .on('broadcast', { event: 'chat-lock' }, ({ payload }) => {
+        const p = payload as { from: string; locked: boolean };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setChatLocked(p.locked);
+      })
+      .on('broadcast', { event: 'wb-open' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setForceBoardOpen(n => n + 1);
+      })
       .on('broadcast', { event: 'class-ended' }, () => {
         window.dispatchEvent(new CustomEvent('class-ended'));
       })
@@ -533,6 +583,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, [renegotiate, send]);
 
   const sendChat = useCallback((text: string) => {
+    if (!isTeacherRef.current && chatLockedRef.current) return;
     const msg: ChatMsg = { id: crypto.randomUUID(), userId, name: displayName, text, ts: Date.now() };
     setChat(prev => [...prev, msg]);
     send('chat', { ...msg });
@@ -565,14 +616,24 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('kick', { userIds });
   }, [send]);
 
-  const startPoll = useCallback((question: string, options: string[], hidden: boolean) => {
+  const startPoll = useCallback((question: string, options: string[], hidden: boolean, durationSec?: number) => {
     if (!isTeacherRef.current) return;
-    const p: Poll = { id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now() };
+    const duration = typeof durationSec === 'number' && durationSec > 0 ? Math.min(durationSec, 600) : 0;
+    const p: Poll = {
+      id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now(),
+      duration, endsAt: duration ? Date.now() + duration * 1000 : undefined,
+    };
     setCurrentPoll(p);
     setPollVotes({});
     setMyVote(null);
     send('poll-start', { ...p });
+    if (pollEndTimerRef.current) clearTimeout(pollEndTimerRef.current);
+    if (duration) {
+      pollEndTimerRef.current = setTimeout(() => { endPollRef.current?.(); }, duration * 1000 + 100);
+    }
   }, [userId, send]);
+  // forward ref for endPoll so startPoll can call it before it's declared
+  const endPollRef = useRef<(() => void) | null>(null);
 
   const votePoll = useCallback((optionIdx: number) => {
     if (!currentPoll || myVote !== null) return;
@@ -583,11 +644,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
 
   const endPoll = useCallback(() => {
     if (!isTeacherRef.current) return;
+    if (pollEndTimerRef.current) { clearTimeout(pollEndTimerRef.current); pollEndTimerRef.current = null; }
     setCurrentPoll(null);
     setPollVotes({});
     setMyVote(null);
     send('poll-end', {});
   }, [send]);
+  useEffect(() => { endPollRef.current = endPoll; }, [endPoll]);
 
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
     if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
@@ -656,9 +719,42 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, []);
   const respondRollCall = useCallback(() => {
     setRollCallRequest(null);
+    // Also record self locally so teacher's own UI counts work even though broadcast is { self: false }
+    setRollCallResponses(prev => ({ ...prev, [userId]: Date.now() }));
     send('roll-call-response', {});
-  }, [send]);
+  }, [send, userId]);
   const dismissRollCallRequest = useCallback(() => setRollCallRequest(null), []);
+
+  // Returns the fresh responses snapshot (reads from ref, not stale closure)
+  const getRollCallResponses = useCallback(() => ({ ...rollCallResponsesRef.current }), []);
+
+  // Teacher class-wide controls
+  const forceMuteAll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    send('force-mute', {});
+  }, [send]);
+  const forceCamOffAll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    send('force-cam-off', {});
+  }, [send]);
+  const clearChat = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setChat([]);
+    send('chat-clear', {});
+  }, [send]);
+  const toggleChatLock = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    setChatLocked(prev => {
+      const next = !prev;
+      send('chat-lock', { locked: next });
+      return next;
+    });
+  }, [send]);
+  const openBoardForAll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    send('wb-open', {});
+    setForceBoardOpen(n => n + 1);
+  }, [send]);
 
   const announceEnd = useCallback(() => {
     send('class-ended', {});
@@ -720,5 +816,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     startPoll,
     votePoll,
     endPoll,
+    chatLocked,
+    forceBoardOpen,
+    forceMuteAll,
+    forceCamOffAll,
+    clearChat,
+    toggleChatLock,
+    openBoardForAll,
+    getRollCallResponses,
   };
 }
