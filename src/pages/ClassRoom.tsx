@@ -597,7 +597,34 @@ const ClassRoom = () => {
       )}
 
       {/* Poll create dialog */}
-      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden) => { room.startPoll(q, opts, hidden); setPollOpen(false); }} />
+      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden, duration) => { room.startPoll(q, opts, hidden, duration); setPollOpen(false); }} />
+
+      {/* Settings dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader><DialogTitle>تنظیمات کلاس</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium mb-2 block">حالت نمایش</label>
+              <div className="flex gap-2">
+                <Button variant={themeMode === 'light' ? 'default' : 'outline'} className="flex-1 gap-2" onClick={() => setThemeMode('light')}><Sun className="w-4 h-4" /> روشن</Button>
+                <Button variant={themeMode === 'dark' ? 'default' : 'outline'} className="flex-1 gap-2" onClick={() => setThemeMode('dark')}><Moon className="w-4 h-4" /> تیره</Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-2 block">اندازه‌ی متن: {fontSize}px</label>
+              <input type="range" min={12} max={22} step={1} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full accent-primary" />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-2 block">زبان</label>
+              <p className="text-xs text-muted-foreground">فعلاً فقط فارسی پشتیبانی می‌شود.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSettingsOpen(false)}>بستن</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Control bar */}
       <footer className="flex items-center justify-center gap-2 sm:gap-3 px-4 py-3 border-t border-border bg-card shrink-0 animate-slide-up">
@@ -618,6 +645,14 @@ const ClassRoom = () => {
             </span>
           )}
         </div>
+        <ControlButton active={false} onClick={() => setSettingsOpen(true)} icon={<Settings className="w-5 h-5" />} label="تنظیمات" />
+        {isTeacher && (
+          <>
+            <div className="w-px h-8 bg-border mx-1" />
+            <ControlButton active={false} onClick={() => { if (confirm('میکروفون همه دانش‌آموزان خاموش شود؟')) room.forceMuteAll(); }} icon={<MicOffIcon className="w-5 h-5" />} label="بی‌صدا کردن همه" danger />
+            <ControlButton active={false} onClick={() => { if (confirm('دوربین همه دانش‌آموزان خاموش شود؟')) room.forceCamOffAll(); }} icon={<VideoOffIcon className="w-5 h-5" />} label="خاموش کردن دوربین همه" danger />
+          </>
+        )}
         <div className="w-px h-8 bg-border mx-1" />
         {isTeacher && (
           <Button variant="outline" onClick={handleEndClass} className="gap-2"><Power className="w-4 h-4" /> پایان کلاس</Button>
