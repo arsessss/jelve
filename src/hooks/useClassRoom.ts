@@ -435,6 +435,37 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         const p = payload as { from: string };
         setRollCallResponses(prev => ({ ...prev, [p.from]: Date.now() }));
       })
+      .on('broadcast', { event: 'force-mute' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        if (isTeacherRef.current) return;
+        const stream = localStreamRef.current;
+        if (stream) stream.getAudioTracks().forEach(t => { t.enabled = false; });
+        setMicOn(false);
+      })
+      .on('broadcast', { event: 'force-cam-off' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        if (isTeacherRef.current) return;
+        const stream = localStreamRef.current;
+        if (stream) stream.getVideoTracks().forEach(t => { t.enabled = false; });
+        setCamOn(false);
+      })
+      .on('broadcast', { event: 'chat-clear' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setChat([]);
+      })
+      .on('broadcast', { event: 'chat-lock' }, ({ payload }) => {
+        const p = payload as { from: string; locked: boolean };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setChatLocked(p.locked);
+      })
+      .on('broadcast', { event: 'wb-open' }, ({ payload }) => {
+        const p = payload as { from: string };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setForceBoardOpen(n => n + 1);
+      })
       .on('broadcast', { event: 'class-ended' }, () => {
         window.dispatchEvent(new CustomEvent('class-ended'));
       })
