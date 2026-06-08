@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Eraser, Pencil, Trash2, Undo2, Slash, Square, Circle as CircleIcon, Type } from "lucide-react";
+import { Eraser, Pencil, Trash2, Undo2, Slash, Square, Circle as CircleIcon, Type, Download, Check, X } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import type { WhiteboardStroke } from "@/hooks/useClassRoom";
@@ -14,6 +14,12 @@ interface Props {
 }
 
 const COLORS = ['#1e1e1e', '#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
+const FONTS = [
+  { label: 'وزیر', value: 'Vazirmatn, sans-serif' },
+  { label: 'ساده', value: 'system-ui, sans-serif' },
+  { label: 'سریف', value: 'Georgia, serif' },
+  { label: 'تک‌فاصله', value: 'ui-monospace, monospace' },
+];
 type Tool = 'free' | 'line' | 'rect' | 'circle' | 'text';
 
 export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Props) {
@@ -23,6 +29,9 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
   const [width, setWidth] = useState(3);
   const [erasing, setErasing] = useState(false);
   const [tool, setTool] = useState<Tool>('free');
+  const [font, setFont] = useState(FONTS[0].value);
+  // Inline text editor state (canvas-relative normalized position)
+  const [textEditor, setTextEditor] = useState<{ x: number; y: number; px: number; py: number; value: string } | null>(null);
   const drawingRef = useRef<{ id: string; points: { x: number; y: number }[] } | null>(null);
   const sizeRef = useRef({ w: 1, h: 1 });
 
@@ -33,9 +42,14 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
     const shape = s.shape || 'free';
     if (shape === 'text' && s.text && s.points[0]) {
       const fontPx = Math.max(12, s.width * 6);
-      ctx.font = `${fontPx}px Vazirmatn, sans-serif`;
+      // Encode font family inside text payload via "font:<family>|<text>" optional prefix
+      let txt = s.text;
+      let family = 'Vazirmatn, sans-serif';
+      const m = /^font:([^|]+)\|/.exec(txt);
+      if (m) { family = m[1]; txt = txt.slice(m[0].length); }
+      ctx.font = `${fontPx}px ${family}`;
       ctx.textBaseline = 'top';
-      ctx.fillText(s.text, s.points[0].x * W, s.points[0].y * H);
+      ctx.fillText(txt, s.points[0].x * W, s.points[0].y * H);
       return;
     }
     if (shape === 'rect' && s.points.length >= 2) {
@@ -113,16 +127,12 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!canDraw) return;
+    // If text editor is open, ignore canvas clicks (let the input handle it)
+    if (textEditor) return;
     if (tool === 'text') {
       const pos = getPos(e);
-      const text = window.prompt('متن را وارد کنید:');
-      if (text && text.trim()) {
-        onStroke({
-          id: crypto.randomUUID(),
-          color, width, erase: false, shape: 'text',
-          points: [pos], text: text.trim(),
-        });
-      }
+      const rect = canvasRef.current!.getBoundingClientRect();
+      setTextEditor({ x: pos.x, y: pos.y, px: pos.x * rect.width, py: pos.y * rect.height, value: '' });
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -172,6 +182,33 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
     onStroke(stroke);
   };
 
+  const commitText = () => {
+    if (!textEditor) return;
+    const t = textEditor.value.trim();
+    if (t) {
+      onStroke({
+        id: crypto.randomUUID(),
+        color, width, erase: false, shape: 'text',
+        points: [{ x: textEditor.x, y: textEditor.y }],
+        text: `font:${font}|${t}`,
+      });
+    }
+    setTextEditor(null);
+  };
+
+  const downloadBoard = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `whiteboard-${Date.now()}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+  };
+
   return (
     <div className="flex flex-col gap-2 h-full animate-fade-in min-h-0">
       {canDraw && (
@@ -194,6 +231,14 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
               />
             ))}
           </div>
+          {tool === 'text' && (
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50">
+              <span className="text-[11px] text-muted-foreground px-1">فونت</span>
+              <select value={font} onChange={e => setFont(e.target.value)} className="text-xs bg-background border border-border rounded-md px-2 py-1 outline-none">
+                {FONTS.map(f => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
+              </select>
+            </div>
+          )}
           <div className="flex items-center gap-3 px-3 py-1 rounded-lg bg-muted/50 min-w-[180px]">
             <span className="text-xs text-muted-foreground shrink-0">ضخامت</span>
             <Slider value={[width]} min={1} max={30} step={1} onValueChange={v => setWidth(v[0])} className="w-28" />
@@ -204,9 +249,10 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
           </div>
           {onUndo && <Button size="sm" variant="outline" onClick={onUndo} className="gap-1"><Undo2 className="w-4 h-4" /> برگشت</Button>}
           <Button size="sm" variant="outline" onClick={onClear} className="gap-1"><Trash2 className="w-4 h-4" /> پاک کردن همه</Button>
+          <Button size="sm" variant="outline" onClick={downloadBoard} className="gap-1"><Download className="w-4 h-4" /> دانلود</Button>
         </div>
       )}
-      <div ref={containerRef} className="flex-1 bg-white rounded-xl border-2 border-border overflow-hidden shadow-inner">
+      <div ref={containerRef} className="relative flex-1 bg-white rounded-xl border-2 border-border overflow-hidden shadow-inner">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
@@ -215,6 +261,24 @@ export function Whiteboard({ strokes, onStroke, onClear, onUndo, canDraw }: Prop
           onPointerCancel={onPointerUp}
           className={cn("touch-none block w-full h-full", canDraw ? "cursor-crosshair" : "cursor-not-allowed")}
         />
+        {textEditor && (
+          <div
+            className="absolute z-10 flex items-center gap-1 bg-card/95 border-2 border-primary rounded-lg shadow-xl px-1 py-1 animate-scale-in"
+            style={{ left: textEditor.px, top: textEditor.py, transform: 'translateY(-4px)' }}
+          >
+            <input
+              autoFocus
+              value={textEditor.value}
+              onChange={e => setTextEditor(t => t ? { ...t, value: e.target.value } : t)}
+              onKeyDown={e => { if (e.key === 'Enter') commitText(); if (e.key === 'Escape') setTextEditor(null); }}
+              placeholder="متن..."
+              className="bg-transparent outline-none text-sm w-56"
+              style={{ color, fontFamily: font, fontSize: Math.max(14, width * 6) }}
+            />
+            <button onClick={commitText} className="p-1 rounded-md hover:bg-primary/15 text-primary"><Check className="w-4 h-4" /></button>
+            <button onClick={() => setTextEditor(null)} className="p-1 rounded-md hover:bg-destructive/15 text-destructive"><X className="w-4 h-4" /></button>
+          </div>
+        )}
       </div>
     </div>
   );
