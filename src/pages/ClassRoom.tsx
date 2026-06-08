@@ -827,16 +827,17 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, onVote, o
   );
 }
 
-function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean) => void }) {
+function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number) => void }) {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [hidden, setHidden] = useState(false);
-  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); } }, [open]);
+  const [duration, setDuration] = useState<number>(60);
+  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); setDuration(60); } }, [open]);
   const submit = () => {
     const q = question.trim();
     const opts = options.map(o => o.trim()).filter(Boolean);
     if (!q || opts.length < 2) { toast.error('سوال و حداقل ۲ گزینه لازم است'); return; }
-    onCreate(q, opts, hidden);
+    onCreate(q, opts, hidden, duration);
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -867,6 +868,10 @@ function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onO
             <Checkbox checked={hidden} onCheckedChange={v => setHidden(!!v)} />
             <span>نتایج تا پایان رأی‌گیری از دانش‌آموزان مخفی باشد</span>
           </label>
+          <div>
+            <label className="text-xs font-medium mb-1 block">زمان (ثانیه) — 0 = بدون زمان</label>
+            <Input type="number" min={0} max={600} value={duration} onChange={e => setDuration(Math.max(0, Math.min(600, Number(e.target.value) || 0)))} className="text-right" />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>لغو</Button>
