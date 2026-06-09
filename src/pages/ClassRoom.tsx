@@ -722,7 +722,8 @@ const ClassRoom = () => {
       )}
 
       {/* Poll create dialog */}
-      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden, duration) => { room.startPoll(q, opts, hidden, duration); setPollOpen(false); }} />
+      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden, duration, correctIndex) => { room.startPoll(q, opts, hidden, duration, correctIndex); setPollOpen(false); }} t={t} />
+      <ConfirmDialog />
 
       {/* Settings dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
