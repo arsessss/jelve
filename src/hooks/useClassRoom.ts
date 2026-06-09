@@ -643,12 +643,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('kick', { userIds });
   }, [send]);
 
-  const startPoll = useCallback((question: string, options: string[], hidden: boolean, durationSec?: number) => {
+  const startPoll = useCallback((question: string, options: string[], hidden: boolean, durationSec?: number, correctIndex?: number) => {
     if (!isTeacherRef.current) return;
     const duration = typeof durationSec === 'number' && durationSec > 0 ? Math.min(durationSec, 600) : 0;
     const p: Poll = {
       id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now(),
       duration, endsAt: duration ? Date.now() + duration * 1000 : undefined,
+      correctIndex: typeof correctIndex === 'number' && correctIndex >= 0 ? correctIndex : undefined,
     };
     setCurrentPoll(p);
     setPollVotes({});
@@ -656,11 +657,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('poll-start', { ...p });
     if (pollEndTimerRef.current) clearTimeout(pollEndTimerRef.current);
     if (duration) {
-      pollEndTimerRef.current = setTimeout(() => { endPollRef.current?.(); }, duration * 1000 + 100);
+      pollEndTimerRef.current = setTimeout(() => { revealPollRef.current?.(); }, duration * 1000 + 100);
     }
   }, [userId, send]);
   // forward ref for endPoll so startPoll can call it before it's declared
   const endPollRef = useRef<(() => void) | null>(null);
+  const revealPollRef = useRef<(() => void) | null>(null);
 
   const votePoll = useCallback((optionIdx: number) => {
     if (!currentPoll || myVote !== null) return;
