@@ -641,16 +641,30 @@ const ClassRoom = () => {
                       variant={room.rollCallActive ? "outline" : "default"}
                     >
                       <ClipboardCheck className="w-4 h-4" />
-                      {room.rollCallActive ? `در حال انتظار... (${rollCallSecondsLeft})` : "حضور و غیاب"}
+                      {room.rollCallActive ? `${t.waiting} (${rollCallSecondsLeft})` : t.rollCall}
                     </Button>
                     {room.rollCallActive && (
                       <p className="text-[11px] text-muted-foreground text-center animate-pulse">
-                        پاسخ‌های دریافت‌شده: {Object.keys(room.rollCallResponses).length}
+                        {t.received}: {Object.keys(room.rollCallResponses).length}
                       </p>
                     )}
                     <p className="text-[11px] text-muted-foreground text-center">
-                      پس از پایان زمان، غایبین به‌صورت خودکار از کلاس خارج می‌شوند.
+                      {t.rollCallNote}
                     </p>
+                    {/* Everyone controls — moved from bottom bar */}
+                    <div className="pt-2 border-t border-border/40 flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-muted-foreground ml-auto">{t.everyone}:</span>
+                      <button
+                        title={t.muteAll}
+                        onClick={async () => { if (await confirm(t.confirmMuteAll)) { room.forceMuteAll(); toast.success(t.muteAll); } }}
+                        className="p-1.5 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                      ><MicOffIcon className="w-3.5 h-3.5" /></button>
+                      <button
+                        title={t.camOffAll}
+                        onClick={async () => { if (await confirm(t.confirmCamOffAll)) { room.forceCamOffAll(); toast.success(t.camOffAll); } }}
+                        className="p-1.5 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                      ><VideoOffIcon className="w-3.5 h-3.5" /></button>
+                    </div>
                   </div>
                 )}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 scrollbar-hide">
@@ -671,6 +685,10 @@ const ClassRoom = () => {
                       onToggleShare={() => room.setUserSharePerm(p.user_id, !room.sharePerms[p.user_id])}
                       onMarkHazer={() => markAttendance(p.user_id, p.full_name, 'hazer')}
                       onMarkGhayeb={() => markAttendance(p.user_id, p.full_name, 'ghayeb')}
+                      onForceMute={p.isOnline ? () => { room.forceMuteAll([p.user_id]); toast.success(`${t.muteUser}: ${p.full_name}`); } : undefined}
+                      onForceCamOff={p.isOnline ? () => { room.forceCamOffAll([p.user_id]); toast.success(`${t.camOffUser}: ${p.full_name}`); } : undefined}
+                      onKick={p.isOnline ? async () => { if (await confirm(t.confirmKick)) { room.kickUsers([p.user_id]); toast.success(`${t.kickUser}: ${p.full_name}`); } } : undefined}
+                      labels={{ teacher: t.teacher, hazer: t.hazer, ghayeb: t.ghayeb, notInClass: t.notInClass, mute: t.muteUser, camOff: t.camOffUser, kick: t.kickUser }}
                     />
                   ))}
                 </div>
