@@ -774,13 +774,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const getRollCallResponses = useCallback(() => ({ ...rollCallResponsesRef.current }), []);
 
   // Teacher class-wide controls
-  const forceMuteAll = useCallback(() => {
+  const forceMuteAll = useCallback((targetIds?: string[]) => {
     if (!isTeacherRef.current) return;
-    send('force-mute', {});
+    send('force-mute', targetIds && targetIds.length ? { targetIds } : {});
   }, [send]);
-  const forceCamOffAll = useCallback(() => {
+  const forceCamOffAll = useCallback((targetIds?: string[]) => {
     if (!isTeacherRef.current) return;
-    send('force-cam-off', {});
+    send('force-cam-off', targetIds && targetIds.length ? { targetIds } : {});
   }, [send]);
   const clearChat = useCallback(() => {
     if (!isTeacherRef.current) return;
