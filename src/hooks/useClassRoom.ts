@@ -545,6 +545,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     const next = !micOn;
     stream.getAudioTracks().forEach(t => { t.enabled = next; });
     setMicOn(next);
+    classSounds.click();
   }, [micOn]);
 
   // Toggle cam
@@ -554,6 +555,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     const next = !camOn;
     stream.getVideoTracks().forEach(t => { t.enabled = next; });
     setCamOn(next);
+    classSounds.click();
   }, [camOn]);
 
   // Screen share
