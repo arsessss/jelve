@@ -449,20 +449,24 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         setRollCallResponses(prev => ({ ...prev, [p.from]: Date.now() }));
       })
       .on('broadcast', { event: 'force-mute' }, ({ payload }) => {
-        const p = payload as { from: string };
+        const p = payload as { from: string; targetIds?: string[] };
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
         if (isTeacherRef.current) return;
+        if (p.targetIds && p.targetIds.length && !p.targetIds.includes(userId)) return;
         const stream = localStreamRef.current;
         if (stream) stream.getAudioTracks().forEach(t => { t.enabled = false; });
         setMicOn(false);
+        classSounds.warn();
       })
       .on('broadcast', { event: 'force-cam-off' }, ({ payload }) => {
-        const p = payload as { from: string };
+        const p = payload as { from: string; targetIds?: string[] };
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
         if (isTeacherRef.current) return;
+        if (p.targetIds && p.targetIds.length && !p.targetIds.includes(userId)) return;
         const stream = localStreamRef.current;
         if (stream) stream.getVideoTracks().forEach(t => { t.enabled = false; });
         setCamOn(false);
+        classSounds.warn();
       })
       .on('broadcast', { event: 'chat-clear' }, ({ payload }) => {
         const p = payload as { from: string };
