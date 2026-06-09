@@ -526,7 +526,7 @@ const ClassRoom = () => {
                       className={cn("p-1.5 rounded-md transition-colors", room.chatLocked ? "bg-destructive/20 text-destructive" : "hover:bg-muted text-muted-foreground")}>
                       {room.chatLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                     </button>
-                    <button onClick={() => { if (confirm('همه پیام‌ها پاک شود؟')) room.clearChat(); }} title="پاک کردن چت"
+                    <button onClick={async () => { if (await confirm(t.confirmClearChat)) room.clearChat(); }} title="پاک کردن چت"
                       className="p-1.5 rounded-md hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors">
                       <Eraser className="w-4 h-4" />
                     </button>
