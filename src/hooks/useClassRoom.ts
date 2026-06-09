@@ -861,6 +861,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     startPoll,
     votePoll,
     endPoll,
+    revealPoll,
     chatLocked,
     forceBoardOpen,
     forceMuteAll,
