@@ -596,7 +596,7 @@ const ClassRoom = () => {
                                 <button onClick={() => setReactPickerFor(p => p === m.id ? null : m.id)} className="p-1 hover:bg-muted rounded-full" title="واکنش"><Smile className="w-3.5 h-3.5" /></button>
                                 {mine && <>
                                   <button onClick={() => { setEditingMsgId(m.id); setEditingText(m.text); }} className="p-1 hover:bg-muted rounded-full" title="ویرایش"><Edit2 className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => { if (confirm('این پیام حذف شود؟')) room.deleteChat(m.id); }} className="p-1 hover:bg-destructive/15 text-destructive rounded-full" title="حذف"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  <button onClick={async () => { if (await confirm(t.confirmDeleteMsg)) room.deleteChat(m.id); }} className="p-1 hover:bg-destructive/15 text-destructive rounded-full" title="حذف"><Trash2 className="w-3.5 h-3.5" /></button>
                                 </>}
                               </div>
                             )}
