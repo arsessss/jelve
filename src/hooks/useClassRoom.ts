@@ -494,6 +494,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       .on('broadcast', { event: 'class-ended' }, () => {
         window.dispatchEvent(new CustomEvent('class-ended'));
       })
+      .on('presence', { event: 'join' }, ({ key }) => {
+        if (key !== userId) classSounds.join();
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        if (key !== userId) classSounds.leave();
+      })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({ user_id: userId, displayName, isTeacher });
