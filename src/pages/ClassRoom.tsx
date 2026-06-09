@@ -512,7 +512,10 @@ const ClassRoom = () => {
 
         {/* Side panel */}
         {sidePanel && (
-          <aside className="w-[26rem] max-w-[90vw] border-l border-border/60 bg-card/70 backdrop-blur-xl flex flex-col shrink-0 animate-slide-up">
+          <aside className={cn(
+            "w-[26rem] max-w-[90vw] border-l border-border/60 bg-card/70 backdrop-blur-xl flex flex-col shrink-0",
+            exitingPanel ? "animate-fade-out" : "animate-slide-up"
+          )}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h2 className="font-bold flex items-center gap-2">
                 {sidePanel === 'chat'
