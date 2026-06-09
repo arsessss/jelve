@@ -993,7 +993,8 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, peerList,
   );
 }
 
-function PollCreateDialog({ open, onOpenChange, onCreate, t }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number, correctIndex?: number) => void; t: typeof T['fa'] }) {
+type ClassT = Record<string, string>;
+function PollCreateDialog({ open, onOpenChange, onCreate, t }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number, correctIndex?: number) => void; t: ClassT }) {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [hidden, setHidden] = useState(false);
