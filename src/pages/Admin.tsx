@@ -532,10 +532,40 @@ const Admin = () => {
     setReportClass(cls);
     setReportData([]);
     setReportLoading(true);
-    const { data, error } = await onlineClassApi.report(cls.id);
+    const [attRes, rosterRes] = await Promise.all([
+      onlineClassApi.attendanceList(cls.id),
+      onlineClassApi.roster(cls.id),
+    ]);
     setReportLoading(false);
-    if (error || !data) { toast.error(error || "خطا در دریافت گزارش"); return; }
-    setReportData(data.participants as AttendanceEntry[]);
+    if (attRes.error && rosterRes.error) {
+      toast.error(attRes.error || rosterRes.error || "خطا در دریافت گزارش");
+      return;
+    }
+    const attMap = new Map<string, { status: 'hazer' | 'ghayeb'; marked_at: string; display_name: string }>();
+    (attRes.data?.attendance || []).forEach(a => attMap.set(a.user_id, { status: a.status, marked_at: a.marked_at, display_name: a.display_name }));
+    const roster = rosterRes.data?.roster || [];
+    const rows: AttendanceEntry[] = [];
+    const seen = new Set<string>();
+    // First, every roster student (default ghayeb if unmarked)
+    for (const r of roster) {
+      const a = attMap.get(r.user_id);
+      rows.push({
+        user_id: r.user_id,
+        display_name: r.full_name,
+        status: a ? a.status : 'unmarked',
+        marked_at: a?.marked_at || null,
+      });
+      seen.add(r.user_id);
+    }
+    // Then any extra marked users not in roster (guests / cross-grade)
+    attMap.forEach((a, uid) => {
+      if (seen.has(uid)) return;
+      rows.push({ user_id: uid, display_name: a.display_name, status: a.status, marked_at: a.marked_at });
+    });
+    // Sort: hazer → ghayeb → unmarked, then alpha
+    const order = { hazer: 0, ghayeb: 1, unmarked: 2 } as const;
+    rows.sort((x, y) => order[x.status] - order[y.status] || x.display_name.localeCompare(y.display_name, 'fa'));
+    setReportData(rows);
   };
 
   const formatDateTime = (iso: string) => {
