@@ -12,11 +12,14 @@ import { onlineClassApi, JoinResult } from "@/lib/online-class";
 import { useClassRoom } from "@/hooks/useClassRoom";
 import { VideoTile } from "@/components/classroom/VideoTile";
 import { Whiteboard } from "@/components/classroom/Whiteboard";
+import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
+import { classSounds, getClassSoundsEnabled, setClassSoundsEnabled } from "@/lib/class-sounds";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
   MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand,
   ClipboardCheck, Check, BarChart3, Smile, Trash2, Edit2, MoreHorizontal, Plus,
-  Settings, Lock, Unlock, MicOff as MicOffIcon, VideoOff as VideoOffIcon, Eraser, Sun, Moon
+  Settings, Lock, Unlock, MicOff as MicOffIcon, VideoOff as VideoOffIcon, Eraser, Sun, Moon,
+  UserX, Volume2, VolumeX, Trophy
 } from "lucide-react";
 
 type SidePanel = 'chat' | 'people' | null;
