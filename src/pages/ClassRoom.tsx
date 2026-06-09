@@ -217,6 +217,8 @@ const ClassRoom = () => {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
   }, [themeMode]);
+  useEffect(() => { localStorage.setItem('class-lang', lang); }, [lang]);
+  useEffect(() => { setClassSoundsEnabled(soundsEnabled); }, [soundsEnabled]);
 
   // Load roster + saved attendance when teacher opens panel
   useEffect(() => {
