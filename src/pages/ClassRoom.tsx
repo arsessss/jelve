@@ -532,7 +532,7 @@ const ClassRoom = () => {
                     </button>
                   </>
                 )}
-                <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
+                <button onClick={closeSidePanel} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
                   <X className="w-4 h-4" />
                 </button>
               </div>
