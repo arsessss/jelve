@@ -3,7 +3,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { NetworkStatus } from "@/components/NetworkStatus";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import Home from "./pages/Home";
 import Contact from "./pages/Contact";
 import Login from "./pages/Login";
@@ -20,7 +19,6 @@ const App = () => (
     <TooltipProvider>
       <Sonner />
       <NetworkStatus />
-      <ConfirmDialog />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Home />} />
