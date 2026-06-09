@@ -743,28 +743,21 @@ const ClassRoom = () => {
         {isTeacher && (
           <ControlButton active={!!room.currentPoll} onClick={() => setPollOpen(true)} icon={<BarChart3 className="w-5 h-5" />} label="نظرسنجی" disabled={!!room.currentPoll} />
         )}
-        <ControlButton active={sidePanel === 'chat'} onClick={() => setSidePanel(p => p === 'chat' ? null : 'chat')} icon={<MessageSquare className="w-5 h-5" />} label="چت" />
+        <ControlButton active={sidePanel === 'chat'} onClick={() => openSidePanel('chat')} icon={<MessageSquare className="w-5 h-5" />} label={t.chat} />
         <div className="relative">
-          <ControlButton active={sidePanel === 'people'} onClick={() => setSidePanel(p => p === 'people' ? null : 'people')} icon={<Users className="w-5 h-5" />} label="افراد" />
+          <ControlButton active={sidePanel === 'people'} onClick={() => openSidePanel('people')} icon={<Users className="w-5 h-5" />} label={t.people} />
           {raisedCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-scale-in">
               {raisedCount}
             </span>
           )}
         </div>
-        <ControlButton active={false} onClick={() => setSettingsOpen(true)} icon={<Settings className="w-5 h-5" />} label="تنظیمات" />
-        {isTeacher && (
-          <>
-            <div className="w-px h-8 bg-border mx-1" />
-            <ControlButton active={false} onClick={() => { if (confirm('میکروفون همه دانش‌آموزان خاموش شود؟')) room.forceMuteAll(); }} icon={<MicOffIcon className="w-5 h-5" />} label="بی‌صدا کردن همه" danger />
-            <ControlButton active={false} onClick={() => { if (confirm('دوربین همه دانش‌آموزان خاموش شود؟')) room.forceCamOffAll(); }} icon={<VideoOffIcon className="w-5 h-5" />} label="خاموش کردن دوربین همه" danger />
-          </>
-        )}
+        <ControlButton active={false} onClick={() => setSettingsOpen(true)} icon={<Settings className="w-5 h-5" />} label={t.settings} />
         <div className="w-px h-8 bg-border mx-1" />
         {isTeacher && (
-          <Button variant="outline" onClick={handleEndClass} className="gap-2"><Power className="w-4 h-4" /> پایان کلاس</Button>
+          <Button variant="outline" onClick={handleEndClass} className="gap-2"><Power className="w-4 h-4" /> {t.endClass}</Button>
         )}
-        <Button variant="destructive" onClick={handleLeave} className="gap-2"><PhoneOff className="w-4 h-4" /> خروج</Button>
+        <Button variant="destructive" onClick={handleLeave} className="gap-2"><PhoneOff className="w-4 h-4" /> {t.leave}</Button>
       </footer>
     </div>
   );
