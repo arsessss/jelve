@@ -993,55 +993,67 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, peerList,
   );
 }
 
-function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number) => void }) {
+function PollCreateDialog({ open, onOpenChange, onCreate, t }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number, correctIndex?: number) => void; t: typeof T['fa'] }) {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [hidden, setHidden] = useState(false);
   const [duration, setDuration] = useState<number>(60);
-  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); setDuration(60); } }, [open]);
+  const [correctIndex, setCorrectIndex] = useState<number>(-1);
+  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); setDuration(60); setCorrectIndex(-1); } }, [open]);
   const submit = () => {
     const q = question.trim();
     const opts = options.map(o => o.trim()).filter(Boolean);
     if (!q || opts.length < 2) { toast.error('سوال و حداقل ۲ گزینه لازم است'); return; }
-    onCreate(q, opts, hidden, duration);
+    onCreate(q, opts, hidden, duration, correctIndex >= 0 && correctIndex < opts.length ? correctIndex : undefined);
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" dir="rtl">
         <DialogHeader>
-          <DialogTitle>ایجاد نظرسنجی</DialogTitle>
+          <DialogTitle>{t.createPoll}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium mb-1 block">سوال</label>
-            <Textarea value={question} onChange={e => setQuestion(e.target.value)} placeholder="سوال نظرسنجی..." className="text-right min-h-[60px]" />
+            <label className="text-xs font-medium mb-1 block">{t.question}</label>
+            <Textarea value={question} onChange={e => setQuestion(e.target.value)} className="text-right min-h-[60px]" />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-medium block">گزینه‌ها</label>
+            <label className="text-xs font-medium block">{t.options}</label>
             {options.map((o, i) => (
               <div key={i} className="flex gap-2">
                 <Input value={o} onChange={e => setOptions(prev => prev.map((p, idx) => idx === i ? e.target.value : p))} placeholder={`گزینه ${i + 1}`} className="text-right" />
                 {options.length > 2 && (
-                  <Button size="icon" variant="outline" onClick={() => setOptions(prev => prev.filter((_, idx) => idx !== i))}><X className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="outline" onClick={() => { setOptions(prev => prev.filter((_, idx) => idx !== i)); if (correctIndex === i) setCorrectIndex(-1); }}><X className="w-4 h-4" /></Button>
                 )}
               </div>
             ))}
             {options.length < 6 && (
-              <Button size="sm" variant="outline" onClick={() => setOptions(prev => [...prev, ""])} className="gap-1"><Plus className="w-3 h-3" /> افزودن گزینه</Button>
+              <Button size="sm" variant="outline" onClick={() => setOptions(prev => [...prev, ""])} className="gap-1"><Plus className="w-3 h-3" /> {t.addOption}</Button>
             )}
+          </div>
+          <div>
+            <label className="text-xs font-medium mb-1 block">{t.correctOptional}</label>
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => setCorrectIndex(-1)} className={cn("text-[11px] px-2 py-1 rounded-md border", correctIndex === -1 ? "bg-muted border-border" : "bg-card border-border/60 hover:bg-muted")}>{t.noCorrect}</button>
+              {options.map((_, i) => (
+                <button key={i} type="button" onClick={() => setCorrectIndex(i)} className={cn("text-[11px] px-2 py-1 rounded-md border flex items-center gap-1", correctIndex === i ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border/60 hover:bg-muted")}>
+                  {correctIndex === i && <Check className="w-3 h-3" />} {`گزینه ${i + 1}`}
+                </button>
+              ))}
+            </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer text-sm">
             <Checkbox checked={hidden} onCheckedChange={v => setHidden(!!v)} />
-            <span>نتایج تا پایان رأی‌گیری از دانش‌آموزان مخفی باشد</span>
+            <span>{t.hideResults}</span>
           </label>
           <div>
-            <label className="text-xs font-medium mb-1 block">زمان (ثانیه) — 0 = بدون زمان</label>
+            <label className="text-xs font-medium mb-1 block">{t.timeSec}</label>
             <Input type="number" min={0} max={600} value={duration} onChange={e => setDuration(Math.max(0, Math.min(600, Number(e.target.value) || 0)))} className="text-right" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>لغو</Button>
-          <Button onClick={submit}>شروع نظرسنجی</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+          <Button onClick={submit}>{t.start}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
