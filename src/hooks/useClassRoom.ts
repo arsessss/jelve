@@ -346,6 +346,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       .on('broadcast', { event: 'chat' }, ({ payload }) => {
         const m = payload as ChatMsg & { from: string };
         setChat(prev => [...prev, { id: m.id, userId: m.userId, name: m.name, text: m.text, ts: m.ts }]);
+        if (m.userId !== userId) classSounds.chat();
       })
       .on('broadcast', { event: 'chat-edit' }, ({ payload }) => {
         const p = payload as { id: string; text: string; from: string };
