@@ -681,6 +681,22 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   }, [send]);
   useEffect(() => { endPollRef.current = endPoll; }, [endPoll]);
 
+  // Kahoot-style reveal: show results + correct answer for 5s, then close.
+  const revealPoll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    if (pollEndTimerRef.current) { clearTimeout(pollEndTimerRef.current); pollEndTimerRef.current = null; }
+    const revealUntil = Date.now() + 5000;
+    setPollVotes(currentVotes => {
+      setCurrentPoll(prev => prev ? { ...prev, revealing: true, revealUntil } : prev);
+      const ci = (typeof (currentPoll?.correctIndex) === 'number') ? currentPoll!.correctIndex : undefined;
+      send('poll-reveal', { correctIndex: ci, votes: currentVotes, revealUntil });
+      return currentVotes;
+    });
+    classSounds.pollEnd();
+    pollEndTimerRef.current = setTimeout(() => { endPollRef.current?.(); }, 5000);
+  }, [send, currentPoll]);
+  useEffect(() => { revealPollRef.current = revealPoll; }, [revealPoll]);
+
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
     if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
     setStrokes(prev => [...prev, stroke]);
