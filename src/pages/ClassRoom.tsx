@@ -140,6 +140,21 @@ const ClassRoom = () => {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() =>
     (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
   );
+  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('class-lang') as Lang) || 'fa');
+  const [soundsEnabled, setSoundsEnabledState] = useState<boolean>(() => getClassSoundsEnabled());
+  const t = T[lang];
+  const confirm = useConfirm();
+  // Side panel close animation
+  const [exitingPanel, setExitingPanel] = useState(false);
+  const closeSidePanel = () => {
+    if (!sidePanel) return;
+    setExitingPanel(true);
+    setTimeout(() => { setSidePanel(null); setExitingPanel(false); }, 200);
+  };
+  const openSidePanel = (p: SidePanel) => {
+    if (sidePanel === p) { closeSidePanel(); return; }
+    setSidePanel(p);
+  };
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
