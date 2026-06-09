@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { classSounds } from "@/lib/class-sounds";
 
 export interface RemotePeer {
   userId: string;
@@ -44,6 +45,9 @@ export interface Poll {
   ts: number;
   duration?: number; // seconds; 0/undefined = no timer
   endsAt?: number;   // epoch ms
+  correctIndex?: number;
+  revealing?: boolean;
+  revealUntil?: number;
 }
 
 interface UseClassRoomOpts {
