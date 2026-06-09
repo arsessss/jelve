@@ -376,13 +376,21 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       .on('broadcast', { event: 'poll-start' }, ({ payload }) => {
         const p = payload as Poll & { from: string };
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
-        setCurrentPoll({ id: p.id, question: p.question, options: p.options, hidden: p.hidden, by: p.by, ts: p.ts });
+        setCurrentPoll({ id: p.id, question: p.question, options: p.options, hidden: p.hidden, by: p.by, ts: p.ts, duration: p.duration, endsAt: p.endsAt, correctIndex: p.correctIndex });
         setPollVotes({});
         setMyVote(null);
+        classSounds.pollStart();
       })
       .on('broadcast', { event: 'poll-vote' }, ({ payload }) => {
         const p = payload as { id: string; optionIdx: number; from: string };
         setPollVotes(prev => ({ ...prev, [p.from]: p.optionIdx }));
+      })
+      .on('broadcast', { event: 'poll-reveal' }, ({ payload }) => {
+        const p = payload as { from: string; correctIndex?: number; votes: Record<string, number>; revealUntil: number };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setPollVotes(p.votes || {});
+        setCurrentPoll(prev => prev ? { ...prev, revealing: true, revealUntil: p.revealUntil, correctIndex: p.correctIndex } : prev);
+        classSounds.pollEnd();
       })
       .on('broadcast', { event: 'poll-end' }, ({ payload }) => {
         const p = payload as { from: string };
