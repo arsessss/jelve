@@ -260,7 +260,7 @@ const ClassRoom = () => {
 
   const handleEndClass = async () => {
     if (!classId) return;
-    if (!confirm('کلاس برای همه پایان یابد؟')) return;
+    if (!(await confirm(t.confirmEnd))) return;
     room.announceEnd();
     await onlineClassApi.end(classId);
     toast.success('کلاس پایان یافت');
