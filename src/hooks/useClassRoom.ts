@@ -372,6 +372,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
         if (p.userIds.includes(userId) && !isTeacherRef.current) {
           setKicked(true);
+          classSounds.kick();
         }
       })
       .on('broadcast', { event: 'poll-start' }, ({ payload }) => {
