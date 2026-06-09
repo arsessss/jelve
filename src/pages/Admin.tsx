@@ -64,9 +64,9 @@ interface OnlineClass {
 interface AttendanceEntry {
   user_id: string;
   display_name: string;
-  is_teacher: boolean;
-  joined_at: string;
-  left_at: string | null;
+  status: 'hazer' | 'ghayeb' | 'unmarked';
+  marked_at?: string | null;
+  is_teacher?: boolean;
 }
 interface Jozveh {
   id: string;
