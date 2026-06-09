@@ -12,11 +12,14 @@ import { onlineClassApi, JoinResult } from "@/lib/online-class";
 import { useClassRoom } from "@/hooks/useClassRoom";
 import { VideoTile } from "@/components/classroom/VideoTile";
 import { Whiteboard } from "@/components/classroom/Whiteboard";
+import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
+import { classSounds, getClassSoundsEnabled, setClassSoundsEnabled } from "@/lib/class-sounds";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MonitorX,
   MessageSquare, Pencil, Users, PhoneOff, X, Send, Loader2, Power, Hand,
   ClipboardCheck, Check, BarChart3, Smile, Trash2, Edit2, MoreHorizontal, Plus,
-  Settings, Lock, Unlock, MicOff as MicOffIcon, VideoOff as VideoOffIcon, Eraser, Sun, Moon
+  Settings, Lock, Unlock, MicOff as MicOffIcon, VideoOff as VideoOffIcon, Eraser, Sun, Moon,
+  UserX, Volume2, VolumeX, Trophy
 } from "lucide-react";
 
 type SidePanel = 'chat' | 'people' | null;
@@ -37,6 +40,80 @@ interface Tile {
 interface RosterEntry { user_id: string; full_name: string }
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '🎉'];
+
+type Lang = 'fa' | 'en';
+const T = {
+  fa: {
+    live: 'زنده', connecting: 'در حال اتصال', connected: 'متصل',
+    chat: 'چت کلاس', participants: 'شرکت‌کنندگان', attendance: 'حضور و غیاب',
+    rollCall: 'حضور و غیاب', endClass: 'پایان کلاس', leave: 'خروج',
+    mic: 'میکروفون', muted: 'بی‌صدا', cam: 'دوربین', camOff: 'خاموش',
+    share: 'اشتراک صفحه', shareStop: 'توقف اشتراک', shareNeedPerm: 'اشتراک (نیاز اجازه)',
+    board: 'وایت‌برد', handUp: 'بالا بردن دست', handDown: 'پایین آوردن دست',
+    poll: 'نظرسنجی', people: 'افراد', settings: 'تنظیمات', sounds: 'صداها',
+    sendPlaceholder: 'پیام خود را بنویسید...', chatLocked: 'چت توسط معلم قفل شده است',
+    noChat: 'هنوز پیامی نیست', edit: 'ویرایش', delete: 'حذف', react: 'واکنش',
+    save: 'ذخیره', cancel: 'لغو', deleted: 'پیام حذف شد',
+    everyone: 'همه', muteAll: 'بی‌صدا کردن همه', camOffAll: 'خاموش کردن دوربین همه',
+    kickUser: 'اخراج', muteUser: 'بی‌صدا کردن', camOffUser: 'خاموش کردن دوربین',
+    teacher: 'معلم', hazer: 'حاضر', ghayeb: 'غایب', notInClass: 'در کلاس نیست', you: 'شما',
+    confirmEnd: 'کلاس برای همه پایان یابد؟',
+    confirmClearChat: 'همه پیام‌ها پاک شود؟',
+    confirmDeleteMsg: 'این پیام حذف شود؟',
+    confirmMuteAll: 'میکروفون همه دانش‌آموزان خاموش شود؟',
+    confirmCamOffAll: 'دوربین همه دانش‌آموزان خاموش شود؟',
+    confirmKick: 'این دانش‌آموز از کلاس اخراج شود؟',
+    rollCallTitle: 'حضور و غیاب', rollCallDesc: 'معلم در حال بررسی حضور است',
+    rollCallWarn: 'اگر تا پایان زمان حاضر را نزنید، غایب ثبت شده و از کلاس خارج می‌شوید.',
+    present: 'حاضرم', presentDone: 'ثبت شد ✓',
+    pollResults: 'نتایج', pollWinner: 'گزینه برتر', correctAnswer: 'پاسخ صحیح',
+    pollRevealing: 'نمایش نتایج', pollVotes: 'رأی', voters: 'رأی‌دهندگان',
+    createPoll: 'ایجاد نظرسنجی', question: 'سوال', options: 'گزینه‌ها',
+    addOption: 'افزودن گزینه', hideResults: 'نتایج تا پایان رأی‌گیری از دانش‌آموزان مخفی باشد',
+    timeSec: 'زمان (ثانیه) — 0 = بدون زمان', start: 'شروع نظرسنجی',
+    correctOptional: 'پاسخ صحیح (اختیاری — برای حالت کاهوت)', noCorrect: 'بدون پاسخ صحیح',
+    theme: 'حالت نمایش', light: 'روشن', dark: 'تیره',
+    fontSize: 'اندازه‌ی متن', language: 'زبان', persian: 'فارسی', english: 'انگلیسی',
+    soundsOn: 'صداهای اعلان', soundsHelp: 'صدای ورود/خروج، چت، دست بالا، نظرسنجی و...',
+    waiting: 'در حال انتظار...', received: 'پاسخ‌های دریافت‌شده',
+    rollCallNote: 'پس از پایان زمان، غایبین به‌صورت خودکار از کلاس خارج می‌شوند.',
+  },
+  en: {
+    live: 'LIVE', connecting: 'Connecting', connected: 'Connected',
+    chat: 'Class chat', participants: 'Participants', attendance: 'Attendance',
+    rollCall: 'Roll-call', endClass: 'End class', leave: 'Leave',
+    mic: 'Mic', muted: 'Muted', cam: 'Camera', camOff: 'Off',
+    share: 'Share screen', shareStop: 'Stop sharing', shareNeedPerm: 'Share (needs permission)',
+    board: 'Whiteboard', handUp: 'Raise hand', handDown: 'Lower hand',
+    poll: 'Poll', people: 'People', settings: 'Settings', sounds: 'Sounds',
+    sendPlaceholder: 'Type your message...', chatLocked: 'Chat is locked by the teacher',
+    noChat: 'No messages yet', edit: 'Edit', delete: 'Delete', react: 'React',
+    save: 'Save', cancel: 'Cancel', deleted: 'Message deleted',
+    everyone: 'Everyone', muteAll: 'Mute everyone', camOffAll: "Turn off everyone's camera",
+    kickUser: 'Kick', muteUser: 'Mute', camOffUser: 'Turn off camera',
+    teacher: 'Teacher', hazer: 'Present', ghayeb: 'Absent', notInClass: 'Not joined', you: 'you',
+    confirmEnd: 'End class for everyone?',
+    confirmClearChat: 'Clear all chat messages?',
+    confirmDeleteMsg: 'Delete this message?',
+    confirmMuteAll: "Mute all students' microphones?",
+    confirmCamOffAll: "Turn off all students' cameras?",
+    confirmKick: 'Kick this student from class?',
+    rollCallTitle: 'Roll-call', rollCallDesc: 'Teacher is checking attendance',
+    rollCallWarn: 'If you do not respond before time runs out, you will be marked absent and removed.',
+    present: "I'm here", presentDone: 'Submitted ✓',
+    pollResults: 'Results', pollWinner: 'Top choice', correctAnswer: 'Correct answer',
+    pollRevealing: 'Revealing results', pollVotes: 'votes', voters: 'Voters',
+    createPoll: 'Create poll', question: 'Question', options: 'Options',
+    addOption: 'Add option', hideResults: 'Hide results from students until end',
+    timeSec: 'Time (seconds) — 0 = no timer', start: 'Start poll',
+    correctOptional: 'Correct answer (optional — Kahoot mode)', noCorrect: 'No correct answer',
+    theme: 'Theme', light: 'Light', dark: 'Dark',
+    fontSize: 'Font size', language: 'Language', persian: 'فارسی', english: 'English',
+    soundsOn: 'Notification sounds', soundsHelp: 'Join/leave, chat, hand raise, polls, etc.',
+    waiting: 'Waiting...', received: 'Responses received',
+    rollCallNote: 'After time ends, absent students are auto-removed.',
+  },
+} as const;
 
 const ClassRoom = () => {
   const { classId } = useParams<{ classId: string }>();
@@ -63,6 +140,21 @@ const ClassRoom = () => {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() =>
     (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
   );
+  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('class-lang') as Lang) || 'fa');
+  const [soundsEnabled, setSoundsEnabledState] = useState<boolean>(() => getClassSoundsEnabled());
+  const t = T[lang];
+  const confirm = useConfirm();
+  // Side panel close animation
+  const [exitingPanel, setExitingPanel] = useState(false);
+  const closeSidePanel = () => {
+    if (!sidePanel) return;
+    setExitingPanel(true);
+    setTimeout(() => { setSidePanel(null); setExitingPanel(false); }, 200);
+  };
+  const openSidePanel = (p: SidePanel) => {
+    if (sidePanel === p) { closeSidePanel(); return; }
+    setSidePanel(p);
+  };
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -125,6 +217,8 @@ const ClassRoom = () => {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
   }, [themeMode]);
+  useEffect(() => { localStorage.setItem('class-lang', lang); }, [lang]);
+  useEffect(() => { setClassSoundsEnabled(soundsEnabled); }, [soundsEnabled]);
 
   // Load roster + saved attendance when teacher opens panel
   useEffect(() => {
@@ -166,7 +260,7 @@ const ClassRoom = () => {
 
   const handleEndClass = async () => {
     if (!classId) return;
-    if (!confirm('کلاس برای همه پایان یابد؟')) return;
+    if (!(await confirm(t.confirmEnd))) return;
     room.announceEnd();
     await onlineClassApi.end(classId);
     toast.success('کلاس پایان یافت');
@@ -418,7 +512,10 @@ const ClassRoom = () => {
 
         {/* Side panel */}
         {sidePanel && (
-          <aside className="w-[26rem] max-w-[90vw] border-l border-border/60 bg-card/70 backdrop-blur-xl flex flex-col shrink-0 animate-slide-up">
+          <aside className={cn(
+            "w-[26rem] max-w-[90vw] border-l border-border/60 bg-card/70 backdrop-blur-xl flex flex-col shrink-0",
+            exitingPanel ? "animate-fade-out" : "animate-slide-up"
+          )}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h2 className="font-bold flex items-center gap-2">
                 {sidePanel === 'chat'
@@ -432,13 +529,13 @@ const ClassRoom = () => {
                       className={cn("p-1.5 rounded-md transition-colors", room.chatLocked ? "bg-destructive/20 text-destructive" : "hover:bg-muted text-muted-foreground")}>
                       {room.chatLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                     </button>
-                    <button onClick={() => { if (confirm('همه پیام‌ها پاک شود؟')) room.clearChat(); }} title="پاک کردن چت"
+                    <button onClick={async () => { if (await confirm(t.confirmClearChat)) room.clearChat(); }} title="پاک کردن چت"
                       className="p-1.5 rounded-md hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors">
                       <Eraser className="w-4 h-4" />
                     </button>
                   </>
                 )}
-                <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
+                <button onClick={closeSidePanel} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded-md">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -502,7 +599,7 @@ const ClassRoom = () => {
                                 <button onClick={() => setReactPickerFor(p => p === m.id ? null : m.id)} className="p-1 hover:bg-muted rounded-full" title="واکنش"><Smile className="w-3.5 h-3.5" /></button>
                                 {mine && <>
                                   <button onClick={() => { setEditingMsgId(m.id); setEditingText(m.text); }} className="p-1 hover:bg-muted rounded-full" title="ویرایش"><Edit2 className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => { if (confirm('این پیام حذف شود؟')) room.deleteChat(m.id); }} className="p-1 hover:bg-destructive/15 text-destructive rounded-full" title="حذف"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  <button onClick={async () => { if (await confirm(t.confirmDeleteMsg)) room.deleteChat(m.id); }} className="p-1 hover:bg-destructive/15 text-destructive rounded-full" title="حذف"><Trash2 className="w-3.5 h-3.5" /></button>
                                 </>}
                               </div>
                             )}
@@ -544,16 +641,30 @@ const ClassRoom = () => {
                       variant={room.rollCallActive ? "outline" : "default"}
                     >
                       <ClipboardCheck className="w-4 h-4" />
-                      {room.rollCallActive ? `در حال انتظار... (${rollCallSecondsLeft})` : "حضور و غیاب"}
+                      {room.rollCallActive ? `${t.waiting} (${rollCallSecondsLeft})` : t.rollCall}
                     </Button>
                     {room.rollCallActive && (
                       <p className="text-[11px] text-muted-foreground text-center animate-pulse">
-                        پاسخ‌های دریافت‌شده: {Object.keys(room.rollCallResponses).length}
+                        {t.received}: {Object.keys(room.rollCallResponses).length}
                       </p>
                     )}
                     <p className="text-[11px] text-muted-foreground text-center">
-                      پس از پایان زمان، غایبین به‌صورت خودکار از کلاس خارج می‌شوند.
+                      {t.rollCallNote}
                     </p>
+                    {/* Everyone controls — moved from bottom bar */}
+                    <div className="pt-2 border-t border-border/40 flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-muted-foreground ml-auto">{t.everyone}:</span>
+                      <button
+                        title={t.muteAll}
+                        onClick={async () => { if (await confirm(t.confirmMuteAll)) { room.forceMuteAll(); toast.success(t.muteAll); } }}
+                        className="p-1.5 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                      ><MicOffIcon className="w-3.5 h-3.5" /></button>
+                      <button
+                        title={t.camOffAll}
+                        onClick={async () => { if (await confirm(t.confirmCamOffAll)) { room.forceCamOffAll(); toast.success(t.camOffAll); } }}
+                        className="p-1.5 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                      ><VideoOffIcon className="w-3.5 h-3.5" /></button>
+                    </div>
                   </div>
                 )}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 scrollbar-hide">
@@ -574,6 +685,10 @@ const ClassRoom = () => {
                       onToggleShare={() => room.setUserSharePerm(p.user_id, !room.sharePerms[p.user_id])}
                       onMarkHazer={() => markAttendance(p.user_id, p.full_name, 'hazer')}
                       onMarkGhayeb={() => markAttendance(p.user_id, p.full_name, 'ghayeb')}
+                      onForceMute={p.isOnline ? () => { room.forceMuteAll([p.user_id]); toast.success(`${t.muteUser}: ${p.full_name}`); } : undefined}
+                      onForceCamOff={p.isOnline ? () => { room.forceCamOffAll([p.user_id]); toast.success(`${t.camOffUser}: ${p.full_name}`); } : undefined}
+                      onKick={p.isOnline ? async () => { if (await confirm(t.confirmKick)) { room.kickUsers([p.user_id]); toast.success(`${t.kickUser}: ${p.full_name}`); } } : undefined}
+                      labels={{ teacher: t.teacher, hazer: t.hazer, ghayeb: t.ghayeb, notInClass: t.notInClass, mute: t.muteUser, camOff: t.camOffUser, kick: t.kickUser }}
                     />
                   ))}
                 </div>
@@ -607,7 +722,8 @@ const ClassRoom = () => {
       )}
 
       {/* Poll create dialog */}
-      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden, duration) => { room.startPoll(q, opts, hidden, duration); setPollOpen(false); }} />
+      <PollCreateDialog open={pollOpen} onOpenChange={setPollOpen} onCreate={(q, opts, hidden, duration, correctIndex) => { room.startPoll(q, opts, hidden, duration, correctIndex); setPollOpen(false); }} t={t} />
+      <ConfirmDialog />
 
       {/* Settings dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -646,28 +762,21 @@ const ClassRoom = () => {
         {isTeacher && (
           <ControlButton active={!!room.currentPoll} onClick={() => setPollOpen(true)} icon={<BarChart3 className="w-5 h-5" />} label="نظرسنجی" disabled={!!room.currentPoll} />
         )}
-        <ControlButton active={sidePanel === 'chat'} onClick={() => setSidePanel(p => p === 'chat' ? null : 'chat')} icon={<MessageSquare className="w-5 h-5" />} label="چت" />
+        <ControlButton active={sidePanel === 'chat'} onClick={() => openSidePanel('chat')} icon={<MessageSquare className="w-5 h-5" />} label={t.chat} />
         <div className="relative">
-          <ControlButton active={sidePanel === 'people'} onClick={() => setSidePanel(p => p === 'people' ? null : 'people')} icon={<Users className="w-5 h-5" />} label="افراد" />
+          <ControlButton active={sidePanel === 'people'} onClick={() => openSidePanel('people')} icon={<Users className="w-5 h-5" />} label={t.people} />
           {raisedCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-scale-in">
               {raisedCount}
             </span>
           )}
         </div>
-        <ControlButton active={false} onClick={() => setSettingsOpen(true)} icon={<Settings className="w-5 h-5" />} label="تنظیمات" />
-        {isTeacher && (
-          <>
-            <div className="w-px h-8 bg-border mx-1" />
-            <ControlButton active={false} onClick={() => { if (confirm('میکروفون همه دانش‌آموزان خاموش شود؟')) room.forceMuteAll(); }} icon={<MicOffIcon className="w-5 h-5" />} label="بی‌صدا کردن همه" danger />
-            <ControlButton active={false} onClick={() => { if (confirm('دوربین همه دانش‌آموزان خاموش شود؟')) room.forceCamOffAll(); }} icon={<VideoOffIcon className="w-5 h-5" />} label="خاموش کردن دوربین همه" danger />
-          </>
-        )}
+        <ControlButton active={false} onClick={() => setSettingsOpen(true)} icon={<Settings className="w-5 h-5" />} label={t.settings} />
         <div className="w-px h-8 bg-border mx-1" />
         {isTeacher && (
-          <Button variant="outline" onClick={handleEndClass} className="gap-2"><Power className="w-4 h-4" /> پایان کلاس</Button>
+          <Button variant="outline" onClick={handleEndClass} className="gap-2"><Power className="w-4 h-4" /> {t.endClass}</Button>
         )}
-        <Button variant="destructive" onClick={handleLeave} className="gap-2"><PhoneOff className="w-4 h-4" /> خروج</Button>
+        <Button variant="destructive" onClick={handleLeave} className="gap-2"><PhoneOff className="w-4 h-4" /> {t.leave}</Button>
       </footer>
     </div>
   );
@@ -677,6 +786,7 @@ function ParticipantRow({
   name, isTeacher, micOn, handRaised, self, isOnline = true, attendance,
   showTeacherControls, drawAllowed, shareAllowed,
   onToggleDraw, onToggleShare, onMarkHazer, onMarkGhayeb,
+  onForceMute, onForceCamOff, onKick, labels,
 }: {
   name: string; isTeacher: boolean; micOn: boolean; handRaised?: boolean; self?: boolean;
   isOnline?: boolean;
@@ -685,7 +795,10 @@ function ParticipantRow({
   drawAllowed?: boolean; shareAllowed?: boolean;
   onToggleDraw?: () => void; onToggleShare?: () => void;
   onMarkHazer?: () => void; onMarkGhayeb?: () => void;
+  onForceMute?: () => void; onForceCamOff?: () => void; onKick?: () => void;
+  labels?: { teacher: string; hazer: string; ghayeb: string; notInClass: string; mute: string; camOff: string; kick: string };
 }) {
+  const L = labels || { teacher: 'معلم', hazer: 'حاضر', ghayeb: 'غایب', notInClass: 'در کلاس نیست', mute: 'بی‌صدا', camOff: 'خاموش دوربین', kick: 'اخراج' };
   return (
     <div className={cn(
       "rounded-xl p-2.5 transition-all duration-300 animate-slide-up border",
@@ -704,10 +817,10 @@ function ParticipantRow({
         <div className="flex-1 min-w-0">
           <p className={cn("font-medium truncate text-sm", !isOnline && "text-muted-foreground")}>{name}</p>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground flex-wrap">
-            {isTeacher && <span className="text-primary font-semibold">معلم</span>}
-            {attendance === 'hazer' && <span className="px-1.5 rounded-full bg-primary/15 text-primary font-semibold">حاضر</span>}
-            {attendance === 'ghayeb' && <span className="px-1.5 rounded-full bg-destructive/15 text-destructive font-semibold">غایب</span>}
-            {!isOnline && !attendance && <span className="text-muted-foreground">در کلاس نیست</span>}
+            {isTeacher && <span className="text-primary font-semibold">{L.teacher}</span>}
+            {attendance === 'hazer' && <span className="px-1.5 rounded-full bg-primary/15 text-primary font-semibold">{L.hazer}</span>}
+            {attendance === 'ghayeb' && <span className="px-1.5 rounded-full bg-destructive/15 text-destructive font-semibold">{L.ghayeb}</span>}
+            {!isOnline && !attendance && <span className="text-muted-foreground">{L.notInClass}</span>}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -719,11 +832,11 @@ function ParticipantRow({
           <button onClick={onMarkHazer} className={cn(
             "flex-1 text-[11px] px-2 py-1 rounded-md font-medium transition-all flex items-center justify-center gap-1",
             attendance === 'hazer' ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-primary/20 hover:text-primary"
-          )}><Check className="w-3 h-3" /> حاضر</button>
+          )}><Check className="w-3 h-3" /> {L.hazer}</button>
           <button onClick={onMarkGhayeb} className={cn(
             "flex-1 text-[11px] px-2 py-1 rounded-md font-medium transition-all flex items-center justify-center gap-1",
             attendance === 'ghayeb' ? "bg-destructive text-destructive-foreground" : "bg-muted hover:bg-destructive/20 hover:text-destructive"
-          )}>غایب</button>
+          )}>{L.ghayeb}</button>
           {isOnline && <>
             <div className="w-px h-5 bg-border" />
             <button title="اجازه‌ی وایت‌برد" onClick={onToggleDraw} className={cn("p-1 rounded-md transition-all", drawAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
@@ -732,6 +845,22 @@ function ParticipantRow({
             <button title="اجازه‌ی اشتراک صفحه" onClick={onToggleShare} className={cn("p-1 rounded-md transition-all", shareAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
               <MonitorUp className="w-3.5 h-3.5" />
             </button>
+            <div className="w-px h-5 bg-border" />
+            {onForceMute && (
+              <button title={L.mute} onClick={onForceMute} className="p-1 rounded-md bg-muted hover:bg-destructive/20 hover:text-destructive transition-all">
+                <MicOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onForceCamOff && (
+              <button title={L.camOff} onClick={onForceCamOff} className="p-1 rounded-md bg-muted hover:bg-destructive/20 hover:text-destructive transition-all">
+                <VideoOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onKick && (
+              <button title={L.kick} onClick={onKick} className="p-1 rounded-md bg-destructive/15 text-destructive hover:bg-destructive/30 transition-all">
+                <UserX className="w-3.5 h-3.5" />
+              </button>
+            )}
           </>}
         </div>
       )}
@@ -864,55 +993,68 @@ function PollCard({ poll, votes, myVote, isTeacher, totalParticipants, peerList,
   );
 }
 
-function PollCreateDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number) => void }) {
+type ClassT = Record<string, string>;
+function PollCreateDialog({ open, onOpenChange, onCreate, t }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (q: string, opts: string[], hidden: boolean, duration: number, correctIndex?: number) => void; t: ClassT }) {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [hidden, setHidden] = useState(false);
   const [duration, setDuration] = useState<number>(60);
-  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); setDuration(60); } }, [open]);
+  const [correctIndex, setCorrectIndex] = useState<number>(-1);
+  useEffect(() => { if (!open) { setQuestion(""); setOptions(["", ""]); setHidden(false); setDuration(60); setCorrectIndex(-1); } }, [open]);
   const submit = () => {
     const q = question.trim();
     const opts = options.map(o => o.trim()).filter(Boolean);
     if (!q || opts.length < 2) { toast.error('سوال و حداقل ۲ گزینه لازم است'); return; }
-    onCreate(q, opts, hidden, duration);
+    onCreate(q, opts, hidden, duration, correctIndex >= 0 && correctIndex < opts.length ? correctIndex : undefined);
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" dir="rtl">
         <DialogHeader>
-          <DialogTitle>ایجاد نظرسنجی</DialogTitle>
+          <DialogTitle>{t.createPoll}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium mb-1 block">سوال</label>
-            <Textarea value={question} onChange={e => setQuestion(e.target.value)} placeholder="سوال نظرسنجی..." className="text-right min-h-[60px]" />
+            <label className="text-xs font-medium mb-1 block">{t.question}</label>
+            <Textarea value={question} onChange={e => setQuestion(e.target.value)} className="text-right min-h-[60px]" />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-medium block">گزینه‌ها</label>
+            <label className="text-xs font-medium block">{t.options}</label>
             {options.map((o, i) => (
               <div key={i} className="flex gap-2">
                 <Input value={o} onChange={e => setOptions(prev => prev.map((p, idx) => idx === i ? e.target.value : p))} placeholder={`گزینه ${i + 1}`} className="text-right" />
                 {options.length > 2 && (
-                  <Button size="icon" variant="outline" onClick={() => setOptions(prev => prev.filter((_, idx) => idx !== i))}><X className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="outline" onClick={() => { setOptions(prev => prev.filter((_, idx) => idx !== i)); if (correctIndex === i) setCorrectIndex(-1); }}><X className="w-4 h-4" /></Button>
                 )}
               </div>
             ))}
             {options.length < 6 && (
-              <Button size="sm" variant="outline" onClick={() => setOptions(prev => [...prev, ""])} className="gap-1"><Plus className="w-3 h-3" /> افزودن گزینه</Button>
+              <Button size="sm" variant="outline" onClick={() => setOptions(prev => [...prev, ""])} className="gap-1"><Plus className="w-3 h-3" /> {t.addOption}</Button>
             )}
+          </div>
+          <div>
+            <label className="text-xs font-medium mb-1 block">{t.correctOptional}</label>
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => setCorrectIndex(-1)} className={cn("text-[11px] px-2 py-1 rounded-md border", correctIndex === -1 ? "bg-muted border-border" : "bg-card border-border/60 hover:bg-muted")}>{t.noCorrect}</button>
+              {options.map((_, i) => (
+                <button key={i} type="button" onClick={() => setCorrectIndex(i)} className={cn("text-[11px] px-2 py-1 rounded-md border flex items-center gap-1", correctIndex === i ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border/60 hover:bg-muted")}>
+                  {correctIndex === i && <Check className="w-3 h-3" />} {`گزینه ${i + 1}`}
+                </button>
+              ))}
+            </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer text-sm">
             <Checkbox checked={hidden} onCheckedChange={v => setHidden(!!v)} />
-            <span>نتایج تا پایان رأی‌گیری از دانش‌آموزان مخفی باشد</span>
+            <span>{t.hideResults}</span>
           </label>
           <div>
-            <label className="text-xs font-medium mb-1 block">زمان (ثانیه) — 0 = بدون زمان</label>
+            <label className="text-xs font-medium mb-1 block">{t.timeSec}</label>
             <Input type="number" min={0} max={600} value={duration} onChange={e => setDuration(Math.max(0, Math.min(600, Number(e.target.value) || 0)))} className="text-right" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>لغو</Button>
-          <Button onClick={submit}>شروع نظرسنجی</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+          <Button onClick={submit}>{t.start}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

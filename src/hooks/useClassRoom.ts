@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { classSounds } from "@/lib/class-sounds";
 
 export interface RemotePeer {
   userId: string;
@@ -44,6 +45,9 @@ export interface Poll {
   ts: number;
   duration?: number; // seconds; 0/undefined = no timer
   endsAt?: number;   // epoch ms
+  correctIndex?: number;
+  revealing?: boolean;
+  revealUntil?: number;
 }
 
 interface UseClassRoomOpts {
@@ -342,6 +346,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       .on('broadcast', { event: 'chat' }, ({ payload }) => {
         const m = payload as ChatMsg & { from: string };
         setChat(prev => [...prev, { id: m.id, userId: m.userId, name: m.name, text: m.text, ts: m.ts }]);
+        if (m.userId !== userId) classSounds.chat();
       })
       .on('broadcast', { event: 'chat-edit' }, ({ payload }) => {
         const p = payload as { id: string; text: string; from: string };
@@ -367,18 +372,27 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
         if (p.userIds.includes(userId) && !isTeacherRef.current) {
           setKicked(true);
+          classSounds.kick();
         }
       })
       .on('broadcast', { event: 'poll-start' }, ({ payload }) => {
         const p = payload as Poll & { from: string };
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
-        setCurrentPoll({ id: p.id, question: p.question, options: p.options, hidden: p.hidden, by: p.by, ts: p.ts });
+        setCurrentPoll({ id: p.id, question: p.question, options: p.options, hidden: p.hidden, by: p.by, ts: p.ts, duration: p.duration, endsAt: p.endsAt, correctIndex: p.correctIndex });
         setPollVotes({});
         setMyVote(null);
+        classSounds.pollStart();
       })
       .on('broadcast', { event: 'poll-vote' }, ({ payload }) => {
         const p = payload as { id: string; optionIdx: number; from: string };
         setPollVotes(prev => ({ ...prev, [p.from]: p.optionIdx }));
+      })
+      .on('broadcast', { event: 'poll-reveal' }, ({ payload }) => {
+        const p = payload as { from: string; correctIndex?: number; votes: Record<string, number>; revealUntil: number };
+        if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
+        setPollVotes(p.votes || {});
+        setCurrentPoll(prev => prev ? { ...prev, revealing: true, revealUntil: p.revealUntil, correctIndex: p.correctIndex } : prev);
+        classSounds.pollEnd();
       })
       .on('broadcast', { event: 'poll-end' }, ({ payload }) => {
         const p = payload as { from: string };
@@ -421,6 +435,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         const p = payload as { from: string; raised: boolean };
         if (p.from === userId) return;
         setPeerState(p.from, { handRaised: p.raised });
+        if (p.raised) classSounds.hand();
       })
       .on('broadcast', { event: 'screen-stream' }, ({ payload }) => {
         const p = payload as { from: string; streamId: string | null };
@@ -445,20 +460,24 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         setRollCallResponses(prev => ({ ...prev, [p.from]: Date.now() }));
       })
       .on('broadcast', { event: 'force-mute' }, ({ payload }) => {
-        const p = payload as { from: string };
+        const p = payload as { from: string; targetIds?: string[] };
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
         if (isTeacherRef.current) return;
+        if (p.targetIds && p.targetIds.length && !p.targetIds.includes(userId)) return;
         const stream = localStreamRef.current;
         if (stream) stream.getAudioTracks().forEach(t => { t.enabled = false; });
         setMicOn(false);
+        classSounds.warn();
       })
       .on('broadcast', { event: 'force-cam-off' }, ({ payload }) => {
-        const p = payload as { from: string };
+        const p = payload as { from: string; targetIds?: string[] };
         if (!peerMetaRef.current[p.from]?.isTeacher && p.from !== userId) return;
         if (isTeacherRef.current) return;
+        if (p.targetIds && p.targetIds.length && !p.targetIds.includes(userId)) return;
         const stream = localStreamRef.current;
         if (stream) stream.getVideoTracks().forEach(t => { t.enabled = false; });
         setCamOn(false);
+        classSounds.warn();
       })
       .on('broadcast', { event: 'chat-clear' }, ({ payload }) => {
         const p = payload as { from: string };
@@ -477,6 +496,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
       })
       .on('broadcast', { event: 'class-ended' }, () => {
         window.dispatchEvent(new CustomEvent('class-ended'));
+      })
+      .on('presence', { event: 'join' }, ({ key }) => {
+        if (key !== userId) classSounds.join();
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        if (key !== userId) classSounds.leave();
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -520,6 +545,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     const next = !micOn;
     stream.getAudioTracks().forEach(t => { t.enabled = next; });
     setMicOn(next);
+    classSounds.click();
   }, [micOn]);
 
   // Toggle cam
@@ -529,6 +555,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     const next = !camOn;
     stream.getVideoTracks().forEach(t => { t.enabled = next; });
     setCamOn(next);
+    classSounds.click();
   }, [camOn]);
 
   // Screen share
@@ -616,12 +643,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('kick', { userIds });
   }, [send]);
 
-  const startPoll = useCallback((question: string, options: string[], hidden: boolean, durationSec?: number) => {
+  const startPoll = useCallback((question: string, options: string[], hidden: boolean, durationSec?: number, correctIndex?: number) => {
     if (!isTeacherRef.current) return;
     const duration = typeof durationSec === 'number' && durationSec > 0 ? Math.min(durationSec, 600) : 0;
     const p: Poll = {
       id: crypto.randomUUID(), question, options, hidden, by: userId, ts: Date.now(),
       duration, endsAt: duration ? Date.now() + duration * 1000 : undefined,
+      correctIndex: typeof correctIndex === 'number' && correctIndex >= 0 ? correctIndex : undefined,
     };
     setCurrentPoll(p);
     setPollVotes({});
@@ -629,11 +657,12 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('poll-start', { ...p });
     if (pollEndTimerRef.current) clearTimeout(pollEndTimerRef.current);
     if (duration) {
-      pollEndTimerRef.current = setTimeout(() => { endPollRef.current?.(); }, duration * 1000 + 100);
+      pollEndTimerRef.current = setTimeout(() => { revealPollRef.current?.(); }, duration * 1000 + 100);
     }
   }, [userId, send]);
   // forward ref for endPoll so startPoll can call it before it's declared
   const endPollRef = useRef<(() => void) | null>(null);
+  const revealPollRef = useRef<(() => void) | null>(null);
 
   const votePoll = useCallback((optionIdx: number) => {
     if (!currentPoll || myVote !== null) return;
@@ -651,6 +680,22 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     send('poll-end', {});
   }, [send]);
   useEffect(() => { endPollRef.current = endPoll; }, [endPoll]);
+
+  // Kahoot-style reveal: show results + correct answer for 5s, then close.
+  const revealPoll = useCallback(() => {
+    if (!isTeacherRef.current) return;
+    if (pollEndTimerRef.current) { clearTimeout(pollEndTimerRef.current); pollEndTimerRef.current = null; }
+    const revealUntil = Date.now() + 5000;
+    setPollVotes(currentVotes => {
+      setCurrentPoll(prev => prev ? { ...prev, revealing: true, revealUntil } : prev);
+      const ci = (typeof (currentPoll?.correctIndex) === 'number') ? currentPoll!.correctIndex : undefined;
+      send('poll-reveal', { correctIndex: ci, votes: currentVotes, revealUntil });
+      return currentVotes;
+    });
+    classSounds.pollEnd();
+    pollEndTimerRef.current = setTimeout(() => { endPollRef.current?.(); }, 5000);
+  }, [send, currentPoll]);
+  useEffect(() => { revealPollRef.current = revealPoll; }, [revealPoll]);
 
   const sendStroke = useCallback((stroke: WhiteboardStroke) => {
     if (!isTeacherRef.current && !drawPermsRef.current[userId]) return;
@@ -729,13 +774,13 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
   const getRollCallResponses = useCallback(() => ({ ...rollCallResponsesRef.current }), []);
 
   // Teacher class-wide controls
-  const forceMuteAll = useCallback(() => {
+  const forceMuteAll = useCallback((targetIds?: string[]) => {
     if (!isTeacherRef.current) return;
-    send('force-mute', {});
+    send('force-mute', targetIds && targetIds.length ? { targetIds } : {});
   }, [send]);
-  const forceCamOffAll = useCallback(() => {
+  const forceCamOffAll = useCallback((targetIds?: string[]) => {
     if (!isTeacherRef.current) return;
-    send('force-cam-off', {});
+    send('force-cam-off', targetIds && targetIds.length ? { targetIds } : {});
   }, [send]);
   const clearChat = useCallback(() => {
     if (!isTeacherRef.current) return;
@@ -816,6 +861,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
     startPoll,
     votePoll,
     endPoll,
+    revealPoll,
     chatLocked,
     forceBoardOpen,
     forceMuteAll,

@@ -64,9 +64,9 @@ interface OnlineClass {
 interface AttendanceEntry {
   user_id: string;
   display_name: string;
-  is_teacher: boolean;
-  joined_at: string;
-  left_at: string | null;
+  status: 'hazer' | 'ghayeb' | 'unmarked';
+  marked_at?: string | null;
+  is_teacher?: boolean;
 }
 interface Jozveh {
   id: string;
@@ -532,10 +532,40 @@ const Admin = () => {
     setReportClass(cls);
     setReportData([]);
     setReportLoading(true);
-    const { data, error } = await onlineClassApi.report(cls.id);
+    const [attRes, rosterRes] = await Promise.all([
+      onlineClassApi.attendanceList(cls.id),
+      onlineClassApi.roster(cls.id),
+    ]);
     setReportLoading(false);
-    if (error || !data) { toast.error(error || "خطا در دریافت گزارش"); return; }
-    setReportData(data.participants as AttendanceEntry[]);
+    if (attRes.error && rosterRes.error) {
+      toast.error(attRes.error || rosterRes.error || "خطا در دریافت گزارش");
+      return;
+    }
+    const attMap = new Map<string, { status: 'hazer' | 'ghayeb'; marked_at: string; display_name: string }>();
+    (attRes.data?.attendance || []).forEach(a => attMap.set(a.user_id, { status: a.status, marked_at: a.marked_at, display_name: a.display_name }));
+    const roster = rosterRes.data?.roster || [];
+    const rows: AttendanceEntry[] = [];
+    const seen = new Set<string>();
+    // First, every roster student (default ghayeb if unmarked)
+    for (const r of roster) {
+      const a = attMap.get(r.user_id);
+      rows.push({
+        user_id: r.user_id,
+        display_name: r.full_name,
+        status: a ? a.status : 'unmarked',
+        marked_at: a?.marked_at || null,
+      });
+      seen.add(r.user_id);
+    }
+    // Then any extra marked users not in roster (guests / cross-grade)
+    attMap.forEach((a, uid) => {
+      if (seen.has(uid)) return;
+      rows.push({ user_id: uid, display_name: a.display_name, status: a.status, marked_at: a.marked_at });
+    });
+    // Sort: hazer → ghayeb → unmarked, then alpha
+    const order = { hazer: 0, ghayeb: 1, unmarked: 2 } as const;
+    rows.sort((x, y) => order[x.status] - order[y.status] || x.display_name.localeCompare(y.display_name, 'fa'));
+    setReportData(rows);
   };
 
   const formatDateTime = (iso: string) => {
@@ -1254,6 +1284,11 @@ const Admin = () => {
             <p className="text-center text-muted-foreground py-6">هیچ شرکت‌کننده‌ای ثبت نشده</p>
           ) : (
             <div className="space-y-2">
+              <div className="flex gap-2 text-xs font-medium mb-2">
+                <span className="px-2 py-1 rounded-full bg-primary/15 text-primary">حاضر: {reportData.filter(r => r.status === 'hazer').length}</span>
+                <span className="px-2 py-1 rounded-full bg-destructive/15 text-destructive">غایب: {reportData.filter(r => r.status === 'ghayeb').length}</span>
+                <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground">ثبت‌نشده: {reportData.filter(r => r.status === 'unmarked').length}</span>
+              </div>
               {reportData.map((p, i) => (
                 <div key={`${p.user_id}-${i}`} className="flex items-center gap-3 p-3 rounded-lg border-2 border-border bg-muted/30">
                   <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
@@ -1262,12 +1297,11 @@ const Admin = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-bold truncate">{p.display_name}</p>
-                      {p.is_teacher && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">معلم</span>}
-                      {!p.left_at && <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" /> آنلاین</span>}
+                      {p.status === 'hazer' && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-semibold">حاضر</span>}
+                      {p.status === 'ghayeb' && <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full font-semibold">غایب</span>}
+                      {p.status === 'unmarked' && <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">ثبت نشده</span>}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">ورود: {formatDateTime(p.joined_at)}</p>
-                    {p.left_at && <p className="text-xs text-muted-foreground">خروج: {formatDateTime(p.left_at)}</p>}
-                    <p className="text-xs text-primary mt-0.5">مدت: {formatDuration(p.joined_at, p.left_at)}</p>
+                    {p.marked_at && <p className="text-xs text-muted-foreground mt-1">ثبت در: {formatDateTime(p.marked_at)}</p>}
                   </div>
                 </div>
               ))}
