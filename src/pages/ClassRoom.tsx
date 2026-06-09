@@ -785,6 +785,7 @@ function ParticipantRow({
   name, isTeacher, micOn, handRaised, self, isOnline = true, attendance,
   showTeacherControls, drawAllowed, shareAllowed,
   onToggleDraw, onToggleShare, onMarkHazer, onMarkGhayeb,
+  onForceMute, onForceCamOff, onKick, labels,
 }: {
   name: string; isTeacher: boolean; micOn: boolean; handRaised?: boolean; self?: boolean;
   isOnline?: boolean;
@@ -793,7 +794,10 @@ function ParticipantRow({
   drawAllowed?: boolean; shareAllowed?: boolean;
   onToggleDraw?: () => void; onToggleShare?: () => void;
   onMarkHazer?: () => void; onMarkGhayeb?: () => void;
+  onForceMute?: () => void; onForceCamOff?: () => void; onKick?: () => void;
+  labels?: { teacher: string; hazer: string; ghayeb: string; notInClass: string; mute: string; camOff: string; kick: string };
 }) {
+  const L = labels || { teacher: 'معلم', hazer: 'حاضر', ghayeb: 'غایب', notInClass: 'در کلاس نیست', mute: 'بی‌صدا', camOff: 'خاموش دوربین', kick: 'اخراج' };
   return (
     <div className={cn(
       "rounded-xl p-2.5 transition-all duration-300 animate-slide-up border",
@@ -812,10 +816,10 @@ function ParticipantRow({
         <div className="flex-1 min-w-0">
           <p className={cn("font-medium truncate text-sm", !isOnline && "text-muted-foreground")}>{name}</p>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground flex-wrap">
-            {isTeacher && <span className="text-primary font-semibold">معلم</span>}
-            {attendance === 'hazer' && <span className="px-1.5 rounded-full bg-primary/15 text-primary font-semibold">حاضر</span>}
-            {attendance === 'ghayeb' && <span className="px-1.5 rounded-full bg-destructive/15 text-destructive font-semibold">غایب</span>}
-            {!isOnline && !attendance && <span className="text-muted-foreground">در کلاس نیست</span>}
+            {isTeacher && <span className="text-primary font-semibold">{L.teacher}</span>}
+            {attendance === 'hazer' && <span className="px-1.5 rounded-full bg-primary/15 text-primary font-semibold">{L.hazer}</span>}
+            {attendance === 'ghayeb' && <span className="px-1.5 rounded-full bg-destructive/15 text-destructive font-semibold">{L.ghayeb}</span>}
+            {!isOnline && !attendance && <span className="text-muted-foreground">{L.notInClass}</span>}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -827,11 +831,11 @@ function ParticipantRow({
           <button onClick={onMarkHazer} className={cn(
             "flex-1 text-[11px] px-2 py-1 rounded-md font-medium transition-all flex items-center justify-center gap-1",
             attendance === 'hazer' ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-primary/20 hover:text-primary"
-          )}><Check className="w-3 h-3" /> حاضر</button>
+          )}><Check className="w-3 h-3" /> {L.hazer}</button>
           <button onClick={onMarkGhayeb} className={cn(
             "flex-1 text-[11px] px-2 py-1 rounded-md font-medium transition-all flex items-center justify-center gap-1",
             attendance === 'ghayeb' ? "bg-destructive text-destructive-foreground" : "bg-muted hover:bg-destructive/20 hover:text-destructive"
-          )}>غایب</button>
+          )}>{L.ghayeb}</button>
           {isOnline && <>
             <div className="w-px h-5 bg-border" />
             <button title="اجازه‌ی وایت‌برد" onClick={onToggleDraw} className={cn("p-1 rounded-md transition-all", drawAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
@@ -840,6 +844,22 @@ function ParticipantRow({
             <button title="اجازه‌ی اشتراک صفحه" onClick={onToggleShare} className={cn("p-1 rounded-md transition-all", shareAllowed ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}>
               <MonitorUp className="w-3.5 h-3.5" />
             </button>
+            <div className="w-px h-5 bg-border" />
+            {onForceMute && (
+              <button title={L.mute} onClick={onForceMute} className="p-1 rounded-md bg-muted hover:bg-destructive/20 hover:text-destructive transition-all">
+                <MicOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onForceCamOff && (
+              <button title={L.camOff} onClick={onForceCamOff} className="p-1 rounded-md bg-muted hover:bg-destructive/20 hover:text-destructive transition-all">
+                <VideoOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onKick && (
+              <button title={L.kick} onClick={onKick} className="p-1 rounded-md bg-destructive/15 text-destructive hover:bg-destructive/30 transition-all">
+                <UserX className="w-3.5 h-3.5" />
+              </button>
+            )}
           </>}
         </div>
       )}
