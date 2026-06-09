@@ -434,6 +434,7 @@ export function useClassRoom({ classId, userId, displayName, isTeacher }: UseCla
         const p = payload as { from: string; raised: boolean };
         if (p.from === userId) return;
         setPeerState(p.from, { handRaised: p.raised });
+        if (p.raised) classSounds.hand();
       })
       .on('broadcast', { event: 'screen-stream' }, ({ payload }) => {
         const p = payload as { from: string; streamId: string | null };
